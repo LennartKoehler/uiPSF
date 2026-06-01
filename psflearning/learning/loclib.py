@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 """
 Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
@@ -17,9 +18,11 @@ import os
 import sys
 import tensorflow as tf
 from psflearning import io
+from typing import Any
 #%%
 class localizationlib:
-    def __init__(self,usecuda=False):
+    def __init__(self, usecuda: bool = False) -> None:
+        """Initialize the localization library with CPU or GPU fitting routines."""
         thispath = os.path.dirname(os.path.abspath(__file__))
         pkgpath = os.path.dirname(os.path.dirname(thispath))
         cfg = io.param.load(pkgpath+'/config/path/config_path.yaml')
@@ -61,7 +64,7 @@ class localizationlib:
             lib_cpu_astM = ctypes.CDLL(dllpath_cpu_astM)        
             lib_cpu_4pi = ctypes.CDLL(dllpath_cpu_4pi)        
             lib_cpu_ast = ctypes.CDLL(dllpath_cpu_ast)
-        except:
+        except OSError:
             print('MLE CPU fitting is not available')
        
     
@@ -125,7 +128,8 @@ class localizationlib:
 
 
 
-    def loc_ast_dual(self,psf_data,I_model,pixelsize_z,cor,imgcenter,T,initz=None,plot=False, start_time = 0):
+    def loc_ast_dual(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+        """Perform multi-channel astigmatic localization fitting."""
 
         rsz = psf_data.shape[-1]
         Nbead = cor.shape[1]
@@ -255,7 +259,8 @@ class localizationlib:
         return P, CRLB, LL, Iall, msezRatio,toc, loc_dict
 
 
-    def loc_4pi(self,psf_data,I_model,A_model,pixelsize_z,cor,imgcenter,T,zT,initz=None,initphi=None,plot=False,start_time=0, linkxy=True):
+    def loc_4pi(self, psf_data: np.ndarray, I_model: np.ndarray, A_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, zT: float, initz: np.ndarray | None = None, initphi: np.ndarray | None = None, plot: bool = False, start_time: float = 0, linkxy: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+        """Perform 4Pi localization fitting with phase information."""
         rsz = psf_data.shape[-1]
         Nbead = cor.shape[1]
         Nchannel = cor.shape[0]
@@ -449,7 +454,8 @@ class localizationlib:
         return P, CRLB, LL, IABall, msezRatio, toc, loc_dict
 
 
-    def loc_ast(self,psf_data,I_model,pixelsize_z,initz=None,plot=False,start_time=0):
+    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+        """Perform single-channel astigmatic localization fitting."""
         rsz = psf_data.shape[-1]
         Nbead = psf_data.shape[0]
         if len(psf_data.shape)>3:
@@ -499,7 +505,7 @@ class localizationlib:
         CRLB = np.zeros((Nparam,Nfit)).astype(np.float32)
         LL = np.zeros((Nfit)).astype(np.float32)-1e10
         
-        pbar = tqdm(total=len(zstart),desc='5/6: localization',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=start_time)])
+        pbar = tqdm(total=len(zstart),desc='5/6: localization',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=toc)])
 
         for z0 in zstart:
             

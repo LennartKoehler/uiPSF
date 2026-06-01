@@ -4,7 +4,7 @@ with open("README.md", "r") as f:
       long_descrition = f.read()
 
 setup(
-      name='psflearning', 
+      name='psflearning',
       version='0.0.1',
       description='A versatile and modular toolbox that uses inverse modelling to extract accurate PSF models for most SMLM imaging modalities from bead and single-molecule data.',
       long_descrition=long_descrition,
@@ -27,11 +27,11 @@ setup(
             "Programming Language :: Python :: 3.7",
             "Topic :: Scientific/Engineering :: Bio-Informatics",
             "Topic :: Scientific/Engineering :: Image Processing",
-            "Topic :: Scientific/Engineering :: Physics"              
+            "Topic :: Scientific/Engineering :: Physics"
       ],
 
 
-      packages=['psflearning'], 
+      packages=['psflearning'],
       python_requires='>=3.7',
       install_requires=[
             "numpy",
@@ -46,6 +46,6 @@ setup(
             "dotted_dict",
             "omegaconf",
             "ipykernel"
-            
+
       ]
 )

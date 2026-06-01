@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
@@ -11,7 +14,7 @@ from .. import utilities as im
 from .. import imagetools as nip
 
 class PSFVolumeBased4pi(PSFInterface):
-    def __init__(self, max_iter: int=None,options=None) -> None:
+    def __init__(self, max_iter: int | None = None, options: Any = None) -> None:
         
         self.parameters = None
         self.updateflag = None
@@ -27,7 +30,7 @@ class PSFVolumeBased4pi(PSFInterface):
             self.max_iter = max_iter
 
 
-    def calc_initials(self, data: PreprocessedImageDataInterface,start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, float | None]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -90,7 +93,7 @@ class PSFVolumeBased4pi(PSFInterface):
                 gxy], start_time
 
 
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         """
@@ -132,7 +135,7 @@ class PSFVolumeBased4pi(PSFInterface):
 
     
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -166,7 +169,8 @@ class PSFVolumeBased4pi(PSFInterface):
                 variables]
 
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization result list to a dictionary with named entries."""
         res_dict = dict(pos=res[0],                    
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

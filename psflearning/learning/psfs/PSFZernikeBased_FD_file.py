@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import scipy as sp
 import tensorflow as tf
@@ -14,7 +18,7 @@ class PSFZernikeBased_FD(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self,options=None) -> None:
+    def __init__(self, options: Any = None) -> None:
         self.parameters = None
         self.data = None
         self.Zphase = None
@@ -25,7 +29,7 @@ class PSFZernikeBased_FD(PSFInterface):
         self.psftype = 'scalar'
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, float | None]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -95,7 +99,7 @@ class PSFZernikeBased_FD(PSFInterface):
                 sigma.astype(np.float32),
                 gxy], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -170,7 +174,8 @@ class PSFZernikeBased_FD(PSFInterface):
 
         return forward_images
 
-    def genpsfmodel(self,sigma,Zmap=None,cor=None,pupil=None,addbead=False):
+    def genpsfmodel(self, sigma: np.ndarray, Zmap: np.ndarray | None = None, cor: np.ndarray | None = None, pupil: Any = None, addbead: bool = False) -> tuple[np.ndarray, Any, Any]:
+        """Generate a PSF model from Zernike map or given pupil function."""
         Zcoeff = None
         if pupil is None:
             imsz = self.data.image_size
@@ -216,7 +221,7 @@ class PSFZernikeBased_FD(PSFInterface):
 
         return I_model, Zcoeff, pupil
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -265,7 +270,8 @@ class PSFZernikeBased_FD(PSFInterface):
                 gxy*self.weight[2],
                 variables] # already correct
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization result list to a dictionary with named entries."""
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

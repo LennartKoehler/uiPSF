@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
-from typing import Type
+from typing import Any, Type
 
 from .PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
 
@@ -11,7 +13,7 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
     Provides access to images data (rois, centers, etc.) for fitter and psf classes.
     Is basically a wrapper around multiple instance of the provided single-channel class.
     """
-    def __init__(self, images, single_channel_dtype: Type[PreprocessedImageDataInterface], is4pi=None) -> None:
+    def __init__(self, images: Any, single_channel_dtype: Type[PreprocessedImageDataInterface], is4pi: bool | None = None) -> None:
         if is4pi is None or is4pi is False:
             self.is4pi = False            
         elif is4pi is True:
@@ -32,7 +34,7 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
         self.shiftxy = None
         return
 
-    def find_rois(self, roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel, FOV=None,min_center_dist=None,max_bead_number=None):
+    def find_rois(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, FOV: Any = None, min_center_dist: float | None = None, max_bead_number: int | None = None) -> None:
         """
         Cuts out rois around local maxima in all channels seperately.
         Just calls the 'find_rois' function for each channel.
@@ -48,7 +50,7 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
 
         return
     
-    def cut_new_rois(self, channel, centers, file_idxs, roi_shape=None, min_border_dist=None):
+    def cut_new_rois(self, channel: int, centers: np.ndarray, file_idxs: np.ndarray, roi_shape: Any = None, min_border_dist: Any = None) -> None:
         """
         Cuts new rois from images with specified centers in specified channel.
         Just calls 'cut_new_rois' function of specified channel.
@@ -58,7 +60,7 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
 
         return
 
-    def get_image_data(self):
+    def get_image_data(self) -> list:
         """
         Provides the necessary image information (e.g., rois, centers, ...) for the psf class
         and the fitter class. Just calls 'get_image_data' function of each channel and appends
@@ -75,19 +77,22 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
         else:
             raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
 
-    def get_channel(self, channel):
+    def get_channel(self, channel: int) -> PreprocessedImageDataInterface:
         """
         Returns the object holding the data for the channel with index 'channel'.
         """
         return self.channels[channel]
     
-    def resetdata(self):
+    def resetdata(self) -> None:
+        """
+        Resets ROIs, centers, and frames to their original found values in all channels.
+        """
         for channel in self.channels:
             channel.resetdata()
         _ = self.pair_coordinates()
         
 
-    def get_min_border_dist(self):
+    def get_min_border_dist(self) -> Any:
         """
         Returns the min_border_dist parameter from the find_rois() function.
         """
@@ -95,7 +100,10 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
 
 
 
-    def pair_coordinates(self,delete_id=None):
+    def pair_coordinates(self, delete_id: Any = None) -> list[np.ndarray | None]:
+        """
+        Pairs coordinates across channels based on proximity.
+        """
         _, _, centers, file_idxs = self.get_image_data()
         mask = np.ones(centers[0].shape[0])
         if delete_id is not None:
@@ -145,8 +153,11 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
 
         return pair_pos_id
 
-    def process(self,roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel,pixelsize_x,pixelsize_z,bead_radius, 
-                min_center_dist=None,FOV=None, modulation_period=None, padPSF=True, plot=True,pixelsize_y=None, isVolume = True,skew_const=None, max_bead_number=None):
+    def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float, 
+                min_center_dist: float | None = None, FOV: Any = None, modulation_period: float | None = None, padPSF: bool = True, plot: bool = True, pixelsize_y: float | None = None, isVolume: bool = True, skew_const: Any = None, max_bead_number: int | None = None) -> None:
+        """
+        Runs the full preprocessing pipeline including ROI finding, channel shift computation, coordinate pairing, offset subtraction, and optional padding.
+        """
 
         self.find_rois(roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel, FOV,min_center_dist, max_bead_number)
         _, rois, _, _ = self.get_image_data()
@@ -208,7 +219,10 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
             channel.bead_radius = bead_radius
         return
 
-    def find_channel_shift_img(self):
+    def find_channel_shift_img(self) -> None:
+        """
+        Computes channel shift using cross-correlation of maximum projections.
+        """
         imgs, _, centers, _ = self.get_image_data()
         img0 = np.max(imgs[0],axis = 0)
         img0 /= np.max(img0)
@@ -231,7 +245,10 @@ class PreprocessedImageDataMultiChannel_smlm(PreprocessedImageDataInterface):
         self.shiftxy = np.float32(shiftxy)
         return 
 
-    def find_channel_shift_cor(self,plot=True):
+    def find_channel_shift_cor(self, plot: bool = True) -> None:
+        """
+        Computes channel shift using coordinate-based correlation.
+        """
         _, _, centers, _ = self.get_image_data()
         cor0 = centers[0]
         shiftxy = []

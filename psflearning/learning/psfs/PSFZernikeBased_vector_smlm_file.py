@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import scipy as sp
 import tensorflow as tf
@@ -14,7 +18,7 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self, options=None) -> None:
+    def __init__(self, options: Any | None = None) -> None:
         self.parameters = None
         self.data = None
 
@@ -26,7 +30,7 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         self.Zoffset = None
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -85,14 +89,6 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
             initz, roisavg, edge = self.partitiondata(initz,LL)
             
         _, rois, cor, _ = self.data.get_image_data()
-        # if options.insitu.backgroundROI:
-        #     bgroi = options.insitu.backgroundROI
-        #     maskcor = (cor[:,-1]>bgroi[2]) & (cor[:,-1]<bgroi[3]) & (cor[:,-2]>bgroi[0]) & (cor[:,-2]<bgroi[1]) & (initz<edge[1])
-        #     zw = np.ones(initz.shape,dtype = np.float32)
-        #     zw[maskcor] = 0.0
-        #     initz *= zw
-        #     self.zweight = zw.reshape(zw.shape+(1,1))
-        # else:
         self.zweight = np.ones(initz.shape+(1,1),dtype=np.float32)
 
         init_positions = np.zeros((rois.shape[0], 3))
@@ -113,8 +109,6 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
                 noll_index[j] = im.nl2noll(nl[0],nl[1])
             self.noll_index = noll_index-1
         
-        #self.weight = np.array([np.median(init_intensities)*10, 100, 20, 0.2, 0.2, 10],dtype=np.float32) # [I, bg, pos, coeff, stagepos]
-        #weight = [1e5,10] + list(np.array([20,0.2,0.2,1])/np.median(init_intensities)*2e4)
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -124,7 +118,6 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         sigma = np.ones((2,))*self.options.model.blur_sigma*np.pi
         self.init_sigma = sigma
         self.pos_weight = self.weight[2]
-        #init_Zcoeff = None
         if init_Zcoeff is None:
             init_Zcoeff = np.zeros((2,self.Zk.shape[0],1,1))
             init_Zcoeff[:,0,0,0] = [1,0]/self.weight[4]
@@ -151,7 +144,7 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
                 sigma.astype(np.float32), 
                 init_stagepos.astype(np.float32)], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -214,7 +207,10 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
 
         return forward_images
 
-    def estzoffset(self,Nz=None):
+    def estzoffset(self, Nz: int | None = None) -> None:
+        """
+        Estimate the z-offset of the PSF model by finding the center of the initial PSF.
+        """
         if Nz is None:
             Nz = np.int32(self.options.insitu.z_range/self.data.pixelsize_z+1)
         self.calpupilfield('vector', Nz,'insitu')
@@ -233,7 +229,10 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
 
         return
 
-    def estzernike(self,start_time = None):
+    def estzernike(self, start_time: Any | None = None) -> np.ndarray:
+        """
+        Estimate the best Zernike coefficient by evaluating a range of indices and amplitudes.
+        """
         pixelsize_z = np.array(self.data.pixelsize_z)
         init_sigma = np.ones((2,),dtype=np.float32)*self.options.model.blur_sigma*np.pi
 
@@ -262,7 +261,10 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
                     I_init_optim = I_init
         return I_init_optim
 
-    def genpsfmodel(self,sigma,Zcoeff,stagepos=None):
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeff: np.ndarray, stagepos: np.ndarray | None = None) -> tuple[np.ndarray, tf.Tensor]:
+        """
+        Generate the PSF model from Zernike coefficients and optional stage position.
+        """
 
         pupil_mag = tf.reduce_sum(self.Zk*Zcoeff[0],axis=0)
         pupil_mag = tf.math.maximum(pupil_mag,0)
@@ -271,7 +273,6 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
 
         if stagepos is None:
             stagepos = self.stagepos
-        #zrange = -self.Zrange+self.Zrange[0]
         zrange = self.Zrange
         phiz = 1j*2*np.pi*(self.kz_med*zrange-self.kz*stagepos)  
         phixy = 1j*2*np.pi*self.ky*0.0+1j*2*np.pi*self.kx*0.0
@@ -292,7 +293,10 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         
         return I_model, pupil
 
-    def partitiondata(self,zf,LL):
+    def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Partition the data into bins based on z-position and select top-likelihood ROIs per bin.
+        """
         _, rois, centers, frames = self.data.get_image_data()
         
         nbin = self.options.insitu.partition_size[0]
@@ -308,7 +312,6 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
             mask = (ind==ii)
             im1 = rois[mask]
             Nslice = np.min((Npsf,im1.shape[0]))            
-            #indsample = list(np.random.choice(im1.shape[0],Nslice,replace=False))
             indsample = np.argsort(-LL[mask])[0:Nslice]
             rois1.append(im1[indsample])
             rois1_avg.append(np.mean(rois1[-1],axis=0))
@@ -324,7 +327,7 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         self.data.frames = np.concatenate(fid,axis=0)
         return zf1, rois1_avg, edge
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -340,24 +343,26 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         positions[:,1:] = positions[:,1:]/bin
 
         I_model,pupil = self.genpsfmodel(sigma,Zcoeff,stagepos)
-        # calculate global positions in images since positions variable just represents the positions in the rois
         images, _, centers, _ = self.data.get_image_data()
         original_shape = images.shape[-3:]
         
         global_positions = np.swapaxes(np.vstack((positions[:,0],centers[:,-2]-positions[:,-2],centers[:,-1]-positions[:,-1])),1,0)
 
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1], # already correct
-                intensities*self.weight[0], # already correct
+                backgrounds*self.weight[1],
+                intensities*self.weight[0],
                 I_model,
                 np.complex64(pupil),
                 Zcoeff,     
                 sigma,
                 stagepos*self.data.pixelsize_z,
-                res] # already correct
+                res]
     
 
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary with labeled entries.
+        """
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

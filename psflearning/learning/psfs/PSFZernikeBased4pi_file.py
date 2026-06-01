@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
@@ -11,8 +14,7 @@ from .. import utilities as im
 from .. import imagetools as nip
 
 class PSFZernikeBased4pi(PSFInterface):
-    def __init__(self, max_iter: int=None,options=None) -> None:
-        
+    def __init__(self, max_iter: int | None = None, options: Any | None = None) -> None:
         self.parameters = None
         self.updateflag = None
         self.data = None
@@ -28,16 +30,14 @@ class PSFZernikeBased4pi(PSFInterface):
             self.max_iter = max_iter
 
 
-    def calc_initials(self, data: PreprocessedImageDataInterface,start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
         self.data = data
-        _, rois, _, _ = self.data.get_image_data() # TODO: check if file_idx are returned at all
+        _, rois, _, _ = self.data.get_image_data()
 
         I_data, A_data, _, init_phi = self.psf2IAB(rois)
-        #I_data = np.sum(rois,axis=-4)/rois.shape[-4]
-        #init_phi = np.reshape(init_phi,(I_data.shape[0],1,1,1))
         init_phi = np.zeros((I_data.shape[0],1,1,1))
         init_positions = np.zeros([I_data.shape[0],len(I_data.shape)-1]).astype(np.float32)               
         init_backgrounds = np.min(gaussian_filter(I_data, [0, 2, 2, 2]), axis=(-3, -2, -1), keepdims=True)
@@ -61,8 +61,6 @@ class PSFZernikeBased4pi(PSFInterface):
         self.Zphase = (np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.float32).reshape(Nz,1,1))*2*np.pi
 
         self.zT = self.data.zT
-        #self.weight = np.array([np.median(init_intensities), 10, 0.1, 0.2,0.2,0.1],dtype=np.float32)
-        #weight = [5e4,20] + list(np.array([0.1,0.3,0.3,0.1])/np.median(init_intensities)*2e4)
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -113,7 +111,7 @@ class PSFZernikeBased4pi(PSFInterface):
                 gxy], start_time
 
 
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         """
@@ -184,7 +182,10 @@ class PSFZernikeBased4pi(PSFInterface):
             forward_images = tf.transpose(psf_fit,[1,0,2,3,4])
         return forward_images
 
-    def genpsfmodel(self,sigma,Zcoeffmag, Zcoeffphase, alpha):
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeffmag: np.ndarray, Zcoeffphase: np.ndarray, alpha: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, tf.Tensor, tf.Tensor]:
+        """
+        Generate the PSF model from Zernike coefficients for both arms of the 4pi setup.
+        """
         phase0 = np.reshape(np.array([-2/3,0,2/3])*np.pi+self.dphase,(3,1,1,1)).astype(np.float32)
         phase0 = tf.complex(tf.math.cos(phase0),tf.math.sin(phase0))
 
@@ -222,18 +223,15 @@ class PSFZernikeBased4pi(PSFInterface):
         
         Zphase = -self.Zphase/self.zT  
         zphase = tf.complex(tf.math.cos(Zphase),tf.math.sin(Zphase))
-        #psf_model_bead = np.real(im.ifft3d(im.fft3d(I_res)*self.bead_kernel*filter2))
         psf_model = np.real(im.ifft3d(im.fft3d(I_res)*filter2))
         
         
         I_model,A_model,_,_ = self.psf2IAB(np.expand_dims(psf_model,axis=0))
         A_model = A_model[0]*zphase
-        #I_model_bead,A_model_bead,_,_ = self.psf2IAB(np.expand_dims(psf_model_bead,axis=0))
-        #A_model_bead = A_model_bead[0]*zphase
 
         return psf_model[1], I_model[0], A_model, pupil1, pupil2
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -252,7 +250,6 @@ class PSFZernikeBased4pi(PSFInterface):
 
         z_center = (I_model.shape[-3] - 1) // 2
 
-        # calculate global positions in images since positions variable just represents the positions in the rois
         images, _, centers, _ = self.data.get_image_data()
 
         global_positions = np.swapaxes(np.vstack((pos[:,0]+z_center,centers[:,-2]-pos[:,-2],centers[:,-1]-pos[:,-1])),1,0)
@@ -277,7 +274,10 @@ class PSFZernikeBased4pi(PSFInterface):
                 variables]
 
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary with labeled entries.
+        """
         res_dict = dict(pos=res[0],                    
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

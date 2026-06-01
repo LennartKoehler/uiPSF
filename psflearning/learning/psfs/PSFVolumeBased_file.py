@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter
@@ -12,7 +16,7 @@ class PSFVolumeBased(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self, options = None) -> None:
+    def __init__(self, options: Any = None) -> None:
         self.parameters = None
         self.data = None
         self.bead_kernel = None
@@ -20,7 +24,7 @@ class PSFVolumeBased(PSFInterface):
         self.default_loss_func = mse_real
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -37,8 +41,6 @@ class PSFVolumeBased(PSFInterface):
         self.calpupilfield('scalar',Nz)
         self.gen_bead_kernel(isVolume=True)
 
-        #self.weight = np.array([np.median(init_intensities)*1, 10, 0.1, 0.1],dtype=np.float32)
-        #weight = [5e4,20] + list(np.array([0.1,0.2])/np.median(init_intensities)*2e4)
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -48,7 +50,6 @@ class PSFVolumeBased(PSFInterface):
         init_backgrounds = np.ones((N,1,1,1),dtype = np.float32)*np.median(init_backgrounds,axis=0, keepdims=True) / self.weight[1]
         gxy = np.zeros((N,2),dtype=np.float32) 
         gI = np.ones((N,Nz,1,1),dtype = np.float32)*init_intensities
-        #gI = np.ones((N,Nz,1,1),dtype = np.float32)*np.mean(init_intensities,keepdims=True)
         self.varinfo = [dict(type='Nfit',id=0),
                    dict(type='Nfit',id=0),
                    dict(type='Nfit',id=0),
@@ -65,7 +66,7 @@ class PSFVolumeBased(PSFInterface):
                 init_psf_model.astype(np.float32),
                 gxy],start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -74,7 +75,7 @@ class PSFVolumeBased(PSFInterface):
         pos, backgrounds, intensities, I_model, gxy = variables
 
         I_model = tf.complex(I_model,0.0)
-        I_otfs = im.fft3d(I_model*self.weight[3])*self.bead_kernel #*tf.complex(intensities*self.weight[0],0.0) 
+        I_otfs = im.fft3d(I_model*self.weight[3])*self.bead_kernel
         pos = tf.complex(tf.reshape(pos,pos.shape+(1,1,1)),0.0)
         I_res = im.ifft3d(I_otfs*self.phaseRamp(pos))
 
@@ -88,7 +89,7 @@ class PSFVolumeBased(PSFInterface):
 
         return forward_images
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -107,15 +108,16 @@ class PSFVolumeBased(PSFInterface):
         global_positions = centers_with_z - positions
             
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1], # already correct
-                intensities*self.weight[0], # already correct
+                backgrounds*self.weight[1],
+                intensities*self.weight[0],
                 I_model_bead,
                 I_model,
                 gxy*self.weight[2],
                 np.flip(I_model,axis=-3),
-                variables] # already correct
+                variables]
 
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization results to a dictionary with named fields."""
         res_dict = dict(pos=res[0],
                         I_model_bead =res[3],
                         I_model = res[4],

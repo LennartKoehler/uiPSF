@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
-from typing import Type
+from typing import Any, Type
 
 import numpy as np
 from numpy.core.fromnumeric import transpose
@@ -14,7 +16,7 @@ from .. import utilities as im
 from .. import imagetools as nip
 
 class PSFPupilBased4pi(PSFInterface):
-    def __init__(self, max_iter: int=None,options=None) -> None:
+    def __init__(self, max_iter: int | None = None, options: Any = None) -> None:
         
         self.parameters = None
         self.updateflag = None
@@ -30,7 +32,7 @@ class PSFPupilBased4pi(PSFInterface):
             self.max_iter = max_iter
 
 
-    def calc_initials(self, data: PreprocessedImageDataInterface,start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, float | None]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -119,7 +121,7 @@ class PSFPupilBased4pi(PSFInterface):
                 gxy], start_time
 
 
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         """
@@ -188,7 +190,8 @@ class PSFPupilBased4pi(PSFInterface):
             forward_images = tf.transpose(psf_fit,[1,0,2,3,4])
         return forward_images
 
-    def genpsfmodel(self,pupil1,pupil2,sigma,alpha):
+    def genpsfmodel(self, pupil1: Any, pupil2: Any, sigma: np.ndarray, alpha: Any) -> tuple[np.ndarray, np.ndarray, Any]:
+        """Generate a PSF model from two pupil functions with interference terms."""
         phase0 = np.reshape(np.array([-2/3,0,2/3])*np.pi+self.dphase,(3,1,1,1)).astype(np.float32)
         phase0 = tf.complex(tf.math.cos(phase0),tf.math.sin(phase0))
 
@@ -225,7 +228,7 @@ class PSFPupilBased4pi(PSFInterface):
 
         return psf_model[1], I_model[0], A_model
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -268,7 +271,8 @@ class PSFPupilBased4pi(PSFInterface):
                 variables]
 
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization result list to a dictionary with named entries."""
         res_dict = dict(pos=res[0],                    
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

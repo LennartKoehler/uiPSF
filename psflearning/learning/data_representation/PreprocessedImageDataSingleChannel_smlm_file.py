@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 
 import h5py
@@ -9,6 +11,7 @@ import matplotlib.pyplot as plt
 from .. import imagetools as nip
 from tkinter import messagebox as mbox
 import sys
+from typing import Any
 
 from .PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
 
@@ -17,7 +20,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
     Class that handles preprocessed data for single-channel case.
     Provides access to images data (rois, centers, etc.) for fitter and psf classes.
     """
-    def __init__(self, images, is4pi=None) -> None:
+    def __init__(self, images: Any, is4pi: bool | None = None) -> None:
         # TODO: instead of using a boolean flag one could think of using a string
         # this would allow for more options
         # the question is if this makes sense or if it makes more sense to create a new class
@@ -46,7 +49,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
         self.patterns = None
         return
 
-    def check_and_init_images(self, images):
+    def check_and_init_images(self, images: Any) -> None:
         """
         Checks if input is valid and initializes image attribute. 
         """
@@ -54,7 +57,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
             # check if everything has same shape
             # and cast to float32 --> allows correct loss calculation in fitter
             self.images = np.array(images, dtype=np.float32)
-        except:
+        except Exception:
             raise ValueError("Was not able to convert input to numpy array.\nCheck that dimensions are the same for all channels and for all images.")
         
         if self.images.ndim != self.num_dims:
@@ -62,7 +65,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
 
         return
 
-    def find_rois(self, roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel,FOV=None, min_center_dist=None,max_bead_number=None):
+    def find_rois(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, FOV: Any = None, min_center_dist: float | None = None, max_bead_number: int | None = None) -> None:
         """
         Cuts out rois around local maxima.
         """
@@ -109,13 +112,16 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
         self.image_size = self.images.shape
         return
     
-    def resetdata(self):
+    def resetdata(self) -> None:
+        """
+        Resets ROIs, centers, and frames to their original found values.
+        """
         self.rois = self.alldata['rois']
         self.centers = self.alldata['centers']
         self.frames = self.alldata['frames']
 
 
-    def remove_close_rois(self, rois, centers, min_dist):
+    def remove_close_rois(self, rois: np.ndarray, centers: np.ndarray, min_dist: float) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculates the distance between all rois/centers and removes the ones
         that are to close to each other in order to ensure that there is only
@@ -132,7 +138,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
         keep_idxs = unique[counts == centers.shape[0]]
         return rois[keep_idxs], centers[keep_idxs]
 
-    def cut_new_rois(self, centers, frames, roi_size=None, min_border_dist=None):
+    def cut_new_rois(self, centers: np.ndarray, frames: np.ndarray, roi_size: Any = None, min_border_dist: Any = None) -> None:
         """
         Cuts new rois from images with specified centers.
         """
@@ -168,7 +174,7 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
         
         return
 
-    def get_image_data(self):
+    def get_image_data(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Provides the necessary image information (e.g., rois, centers, ...) for the psf class
         and the fitter class.
@@ -179,8 +185,11 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
             raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
 
 
-    def process(self,roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel,pixelsize_x,pixelsize_z,bead_radius, 
-                min_center_dist=None,FOV=None, modulation_period=None, padPSF=False, plot=True,pixelsize_y=None, isVolume = False,skew_const=None, max_bead_number=None):
+    def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float, 
+                min_center_dist: float | None = None, FOV: Any = None, modulation_period: float | None = None, padPSF: bool = False, plot: bool = True, pixelsize_y: float | None = None, isVolume: bool = False, skew_const: Any = None, max_bead_number: int | None = None) -> None:
+        """
+        Runs the full preprocessing pipeline including ROI finding, offset subtraction, and pixel size configuration.
+        """
 
         self.find_rois(roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel, FOV, min_center_dist)
         img, rois, cor, _ = self.get_image_data()
@@ -207,7 +216,6 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
         if pixelsize_y is None:
             pixelsize_y = pixelsize_x
         self.pixelsize_y = pixelsize_y
- 
 
         
         if modulation_period is not None:
@@ -215,4 +223,3 @@ class PreprocessedImageDataSingleChannel_smlm(PreprocessedImageDataInterface):
 
 
         return
-

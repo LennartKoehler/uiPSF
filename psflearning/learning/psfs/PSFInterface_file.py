@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 import pickle
 
@@ -48,7 +50,7 @@ class PSFInterface():
             pickle.dump(self, f)
 
     @classmethod
-    def load(filename: str):
+    def load(cls, filename: str) -> PSFInterface:
         """
         Load object from file.
         """
@@ -56,7 +58,10 @@ class PSFInterface():
             self = pickle.load(f)
         return self
 
-    def calpupilfield(self,fieldtype='vector',Nz=None,datatype='bead'):
+    def calpupilfield(self, fieldtype: str = 'vector', Nz: int | None = None, datatype: str = 'bead') -> None:
+        """
+        Calculate pupil field and related optical quantities for PSF modeling.
+        """
         if Nz is None:
             Nz = self.bead_kernel.shape[0]
         bin = self.options.model.bin
@@ -117,9 +122,7 @@ class PSFInterface():
         h = np.concatenate((hx,hy),axis=0)
         self.dipole_field = np.complex64(h)
         if self.options.model.with_apoid:
-            #apoid = 1/np.lib.scimath.sqrt(cos_med)
             apoid = np.lib.scimath.sqrt(cos_imm)/cos_med
-            #apoid = np.lib.scimath.sqrt(cos_med)/cos_imm
             if fieldtype=='scalar':
                 apoid=apoid*Tavg
         else:
@@ -141,9 +144,6 @@ class PSFInterface():
                 psfA = im.cztfunc1(PupilFunction,self.paramxy)       
                 I_res += psfA*tf.math.conj(psfA)
             self.normf = np.complex64(1/np.sum(I_res))
-        #if datatype == 'bead':
-        #    self.Zrange = -1*np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
-        #elif datatype == 'insitu':
         self.Zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
         self.kx = np.complex64(xx*NA/emission_wavelength)*pixelsize_x
         self.ky = np.complex64(yy*NA/emission_wavelength)*pixelsize_y
@@ -155,7 +155,6 @@ class PSFInterface():
         self.nmed = nmed
         self.Zk = np.float32(Zk)
 
-        # only for bead data, precompute phase ramp
         Lx = self.data.rois.shape[-1]      
         Ly = self.data.rois.shape[-2]
         Lz = self.data.rois.shape[-3]
@@ -166,12 +165,18 @@ class PSFInterface():
         self.kzv = (np.linspace(-Lz/2+0.5,Lz/2-0.5,Lz,dtype=np.float32).reshape(Lz,1,1))/Lz
 
 
-    def calnorm(self,pupil):
+    def calnorm(self, pupil: tf.Tensor) -> tf.Tensor:
+        """
+        Calculate the normalization factor from a pupil function.
+        """
         psfA = im.cztfunc1(pupil,self.paramxy)   
         normf = tf.math.real(tf.reduce_sum(psfA*tf.math.conj(psfA)))
         return normf
         
-    def gen_bead_kernel(self,isVolume = False):
+    def gen_bead_kernel(self, isVolume: bool = False) -> None:
+        """
+        Generate a bead kernel for convolution with the PSF model.
+        """
         pixelsize_z = self.data.pixelsize_z
         bead_radius = self.data.bead_radius
         if isVolume:
@@ -208,14 +213,13 @@ class PSFInterface():
         return 
 
 
-    def applyPhaseRamp(self, img, shiftvec):
+    def applyPhaseRamp(self, img: tf.Tensor, shiftvec: tf.Tensor) -> tf.Tensor:
         """
         Applies a frequency ramp as a phase factor according to the shiftvec to a Fourier transform to shift the image.
-		Identical to implementation in InverseModelling. Just removed if-statement (0) that does not make sense for me and prevent my code to work correctly.
-		img: input Fourier transform tensor
-		shiftvec: real-space shifts
-		"""
-        # TODO: no im
+        Identical to implementation in InverseModelling. Just removed if-statement (0) that does not make sense for me and prevent my code to work correctly.
+        img: input Fourier transform tensor
+        shiftvec: real-space shifts
+        """
         res = im.totensor(img)
         myshape = im.shapevec(res)
         ShiftDims = shiftvec.shape[-1]
@@ -226,7 +230,10 @@ class PSFInterface():
             res = res * tf.exp(tf.complex(im.totensor(0.0), 2.0 * np.pi * myshifts * nip.ramp1D(myshape[-d], ramp_dim = -d, freq='ftfreq')))
         return res
 
-    def phaseRamp(self,pos):
+    def phaseRamp(self, pos: tf.Tensor) -> tf.Tensor:
+        """
+        Compute a phase ramp factor for the given positions.
+        """
         if pos.shape[1]==2:
             shiftphase = 1j*2*np.pi*(self.kxv*pos[:,1]+self.kyv*pos[:,0])
         if pos.shape[1]==3:
@@ -234,7 +241,10 @@ class PSFInterface():
 
         return tf.exp(shiftphase)
 
-    def applyDrfit(self,psfin,gxy):
+    def applyDrfit(self, psfin: tf.Tensor, gxy: tf.Tensor) -> tf.Tensor:
+        """
+        Apply drift correction to a PSF using skew or linear drift.
+        """
         otf2d = im.fft2d(tf.complex(psfin,0.0))
         if self.data.skew_const:
             sk = np.array([self.data.skew_const],dtype=np.float32)+np.zeros(gxy.shape,dtype=np.float32)
@@ -249,7 +259,10 @@ class PSFInterface():
 
         return psf_shift
 
-    def psf2IAB(self, ROIs):
+    def psf2IAB(self, ROIs: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Convert PSF intensity measurements at three phases to IAB model components.
+        """
         G = np.zeros(ROIs.shape, dtype = np.complex64)
         G[:,0] = ROIs[:,0]*np.exp(-2*np.pi/3*1j)+ROIs[:,1]+ROIs[:,2]*np.exp(2*np.pi/3*1j)
         G[:,1] = np.sum(ROIs,axis=1)
@@ -279,4 +292,3 @@ class PSFInterface():
 
 
         return I, A, B, phi
-

@@ -188,7 +188,7 @@ def showpupil(f,p, index=None):
 def showzernike(f,p,index=None):
     n_max = p.option.model.n_max
     Nk = (n_max+1)*(n_max+2)//2
-    
+
     indz = np.array([4,5,6,7,10,21])
     textstr = [None]*6
     textstr[0] = r'$\mathrm{D \ astigmatism}$'
@@ -204,7 +204,7 @@ def showzernike(f,p,index=None):
         fig = plt.figure(figsize=[10,8])
         if index is None:
             zcoeff = f.res.zernike_coeff
-            
+
         else:
             zcoeff = f.res.zernike_coeff[:,index]
 
@@ -218,7 +218,7 @@ def showzernike(f,p,index=None):
         plt.xlabel('zernike polynomial')
         plt.ylabel('coefficient')
         plt.legend(['pupil magnitude','pupil phase'])
-        
+
         ax1 = fig.add_subplot(2,1,2)
         tstr = ''
         for i in range(0,Nzk):
@@ -252,20 +252,20 @@ def showzernike(f,p,index=None):
         fig1 = plt.figure(figsize=[5*Nchannel,4])
         fig2 = plt.figure(figsize=[5*Nchannel,4])
         Zk = f.res.channel0.zernike_polynomial
-        
+
         for i in range(0,Nchannel):
             if index is None:
                 zcoeff = f.res['channel'+str(i)].zernike_coeff
             else:
                 zcoeff = f.res['channel'+str(i)].zernike_coeff[:,index]
-            
+
             if len(f.res['channel'+str(i)].pupil.shape)>2:
                 aperture=np.float32(np.abs(f.res['channel'+str(i)].pupil[0])>0.0)
             else:
                 aperture=np.float32(np.abs(f.res['channel'+str(i)].pupil)>0.0)
 
 
-            line, = ax1.plot(zcoeff[0],'.-')    
+            line, = ax1.plot(zcoeff[0],'.-')
             ax2.plot(zcoeff[1],'.-')
             ax1.set_xlabel('zernike polynomial')
             ax1.set_ylabel('coefficient')
@@ -293,7 +293,7 @@ def showzernike(f,p,index=None):
             ax4.axis('off')
             ax4.set_title('pupil phase ' + str(i),fontsize=20)
             fig2.colorbar(h1,ax=ax4)
-        
+
         bbox = dict(boxstyle='round', fc='blanchedalmond', ec='orange', alpha=0.5)
         for k in range(0,len(textstr)):
             ax5.text(0.01+k*0.35, 0.9, textstr[k], fontsize=12, bbox=bbox,
@@ -315,7 +315,7 @@ def showzernike(f,p,index=None):
         for i in range(0,Nchannel):
             zcoeff_mag = f.res['channel'+str(i)].zernike_coeff_mag
             zcoeff_phase = f.res['channel'+str(i)].zernike_coeff_phase
-            line, = ax1.plot(zcoeff_mag[0],'.-')    
+            line, = ax1.plot(zcoeff_mag[0],'.-')
             ax2.plot(zcoeff_phase[0],'.-')
             ax2.set_ylim((-0.6,0.6))
             ax3.plot(zcoeff_mag[1],'.-')
@@ -420,7 +420,7 @@ def zernikemap(f,index,zmap,zcoeff,pupil,Zk):
     else:
         aperture=np.float32(np.abs(pupil)>0.0)
     imsz = np.array(f.rois.image_size)
-    
+
 
     scale = (imsz[-2:]-1)/(np.array(zmap.shape[-2:])-1)
 
@@ -533,11 +533,11 @@ def showpsfvsdata_insitu(f,p):
             mask = (ind==ii)
             if sum(mask)>0:
                 rois_avg[ii-1] = np.mean(rois[mask],axis=0)
-        
+
         psfcompare(rois_avg,I_model,p.pixel_size.z)
 
     else:
-        Nchannel = f.rois.psf_data.shape[0]    
+        Nchannel = f.rois.psf_data.shape[0]
         zoffset = f.res.channel0.zoffset
         for ch in range(0,Nchannel):
             rois = f.rois.psf_data[ch]
@@ -595,7 +595,7 @@ def plotlocbias(loc,p):
 def showtransform(f):
     Nchannel = f.rois.psf_data.shape[0]
     ref_pos = f.res.channel0.pos
-    dxy = f.res.xyshift 
+    dxy = f.res.xyshift
     fig = plt.figure(figsize=[5*Nchannel,10])
     spec = gridspec.GridSpec(ncols=Nchannel, nrows=2,
                         width_ratios=list(np.ones(Nchannel)), wspace=0.3,
@@ -624,7 +624,7 @@ def showtransform(f):
         ax1.set_xlabel('x (pixel)')
         ax1.set_ylabel('y (pixel)')
 
-    
+
     ax.legend(['ref','target','center'])
     ax1.legend(['ref_trans','target','center'])
 

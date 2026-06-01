@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 import pickle
+from typing import Any
 
 
 class PreprocessedImageDataInterface:
@@ -29,7 +32,7 @@ class PreprocessedImageDataInterface:
             pickle.dump(self, f)
 
     @classmethod
-    def load(filename: str):
+    def load(cls, filename: str) -> PreprocessedImageDataInterface:
         """
         Load object from file.
         """

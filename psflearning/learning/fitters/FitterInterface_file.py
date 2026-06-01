@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 import pickle
 
@@ -21,14 +23,14 @@ class FitterInterface:
         raise NotImplementedError("You need to implement a 'objective' method in your fitter class.")
 
     @abstractmethod
-    def learn_psf(self, variables: list=None) -> list:
+    def learn_psf(self, variables: list | None = None) -> list:
         """
         Is called by the user and defines the procedure of the psf learning.
         Returns a list containing the results, e.g., a psf object, the final postioins, intensities and backgrounds.
         """
         raise NotImplementedError("You need to implement a 'learn_psf' method in your psf class.")
 
-    def save(self, filename: str):
+    def save(self, filename: str) -> None:
         """
         Save object to file.
         """
@@ -36,7 +38,7 @@ class FitterInterface:
             pickle.dump(self, f)
 
     @classmethod
-    def load(filename: str):
+    def load(cls, filename: str) -> FitterInterface:
         """
         Load object from file.
         """

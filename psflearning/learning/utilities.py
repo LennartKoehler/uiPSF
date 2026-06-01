@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 """
 Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
@@ -19,21 +20,26 @@ defaultTFCpxDataType="complex64"
 #%%
 # The functions below are Tensorflow now
 
-def fft3d(tfin):
+def fft3d(tfin: tf.Tensor) -> tf.Tensor:
+    """Compute a centered 3D FFT using TensorFlow."""
     return tf.signal.fftshift(tf.signal.fft3d(tf.signal.fftshift(tfin,axes=[-1,-2,-3])),axes=[-1,-2,-3])
 
-def ifft3d(tfin):
+def ifft3d(tfin: tf.Tensor) -> tf.Tensor:
+    """Compute a centered inverse 3D FFT using TensorFlow."""
     return tf.signal.ifftshift(tf.signal.ifft3d(tf.signal.ifftshift(tfin,axes=[-1,-2,-3])),axes=[-1,-2,-3])
 
-def fft2d(tfin):
+def fft2d(tfin: tf.Tensor) -> tf.Tensor:
+    """Compute a centered 2D FFT using TensorFlow."""
     return tf.signal.fftshift(tf.signal.fft2d(tf.signal.fftshift(tfin,axes=[-1,-2])),axes=[-1,-2])
 
-def ifft2d(tfin):
+def ifft2d(tfin: tf.Tensor) -> tf.Tensor:
+    """Compute a centered inverse 2D FFT using TensorFlow."""
     return tf.signal.ifftshift(tf.signal.ifft2d(tf.signal.ifftshift(tfin,axes=[-1,-2])),axes=[-1,-2])
 
 
 
-def psf2cspline_np(psf):
+def psf2cspline_np(psf: np.ndarray) -> np.ndarray:
+    """Compute cubic spline coefficients from a 3D PSF array."""
     # calculate A
     A = np.zeros((64, 64))
     for i in range(1, 5):
@@ -54,7 +60,8 @@ def psf2cspline_np(psf):
     return coeff
 
 
-def calsplinecoeff(A,psf,psf_up):
+def calsplinecoeff(A: np.ndarray, psf: np.ndarray, psf_up: np.ndarray) -> np.ndarray:
+    """Calculate cubic spline coefficients for each voxel of the PSF."""
     # calculate cspline coefficients
     coeff = np.zeros((64, psf.shape[0]-1, psf.shape[1]-1, psf.shape[2]-1))
     for i in range(coeff.shape[1]):
@@ -67,7 +74,8 @@ def calsplinecoeff(A,psf,psf_up):
 
     return coeff
 
-def nl2noll(n,l):
+def nl2noll(n: int, l: int) -> np.int32:
+    """Convert Zernike (n, l) indices to Noll index j."""
     mm = abs(l)
     j = n * (n + 1) / 2 + 1 + max(0, mm - 1)
     if ((l > 0) & (np.mod(n, 4) >= 2)) | ((l < 0) & (np.mod(n, 4) <= 1)):
@@ -75,7 +83,8 @@ def nl2noll(n,l):
     
     return np.int32(j)
 
-def noll2nl(j):
+def noll2nl(j: int) -> tuple[np.int32, np.int32]:
+    """Convert Noll index j to Zernike (n, l) indices."""
     n = np.ceil((-3 + np.sqrt(1 + 8*j)) / 2)
     l = j - n * (n + 1) / 2 - 1
     if np.mod(n, 2) != np.mod(l, 2):
@@ -86,7 +95,8 @@ def noll2nl(j):
     
     return np.int32(n),np.int32(l)
 
-def radialpoly(n,m,rho):
+def radialpoly(n: int, m: int, rho: np.ndarray) -> np.ndarray:
+    """Compute the radial component of a Zernike polynomial."""
     if m==0:
         g = np.sqrt(n+1)
     else:
@@ -99,7 +109,8 @@ def radialpoly(n,m,rho):
 
     return r
 
-def genZern1(n_max,xsz):
+def genZern1(n_max: int, xsz: int) -> np.ndarray:
+    """Generate Zernike polynomials up to radial order n_max on an xsz x xsz grid."""
     Nk = (n_max+1)*(n_max+2)//2
     Z = np.ones((Nk,xsz,xsz))
     pkx = 2/xsz
@@ -121,7 +132,8 @@ def genZern1(n_max,xsz):
 
 
 
-def prechirpz1(kpixelsize,pixelsize_x,pixelsize_y,N,M):
+def prechirpz1(kpixelsize: float, pixelsize_x: float, pixelsize_y: float, N: int, M: int) -> tuple[np.ndarray, tf.Tensor, np.ndarray]:
+    """Pre-compute chirp-z transform parameters for 2D resampling."""
     krange = np.linspace(-N/2+0.5,N/2-0.5,N,dtype=np.float32)
     [xxK,yyK] = np.meshgrid(krange,krange)
     xrange = np.linspace(-M/2+0.5,M/2-0.5,M,dtype=np.float32)
@@ -138,7 +150,8 @@ def prechirpz1(kpixelsize,pixelsize_x,pixelsize_y,N,M):
     return A,Bh,C
 
 
-def cztfunc1(datain,param):
+def cztfunc1(datain: tf.Tensor, param: tuple[np.ndarray, tf.Tensor, np.ndarray]) -> tf.Tensor:
+    """Apply 2D chirp-z transform using pre-computed parameters."""
     A = param[0]
     Bh = param[1]
     C = param[2]

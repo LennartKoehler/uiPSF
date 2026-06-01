@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import scipy as sp
 import tensorflow as tf
@@ -13,7 +17,7 @@ class PSFZernikeBased(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self,options=None) -> None:
+    def __init__(self, options: Any = None) -> None:
         self.parameters = None
         self.data = None
         self.Zphase = None
@@ -26,7 +30,7 @@ class PSFZernikeBased(PSFInterface):
         self.psftype = 'scalar'
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -58,8 +62,6 @@ class PSFZernikeBased(PSFInterface):
             self.n_max_mag = 100
      
 
-        #self.weight = np.array([np.median(init_intensities)*10, 100, 0.1, 0.2, 0.2],dtype=np.float32)
-        #weight = [1e5,10] + list(np.array([0.1,0.2,0.2])/np.median(init_intensities)*2e4)
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -91,7 +93,7 @@ class PSFZernikeBased(PSFInterface):
                 sigma.astype(np.float32),
                 gxy], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -140,7 +142,6 @@ class PSFZernikeBased(PSFInterface):
         if not self.options.model.var_blur:
             sigma = self.init_sigma
         
-        #sigma = sigma*self.weight[5]
         filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
         filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
         I_blur = im.ifft3d(im.fft3d(I_res)*self.bead_kernel*filter2)
@@ -162,7 +163,8 @@ class PSFZernikeBased(PSFInterface):
         return forward_images
 
 
-    def genpsfmodel(self,sigma,Zcoeff=None,pupil=None, addbead=False):
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeff: np.ndarray | None = None, pupil: Any = None, addbead: bool = False) -> tuple[tf.Tensor, Any]:
+        """Generate a PSF model from Zernike coefficients or a given pupil function."""
         if pupil is None:
             pupil_mag = tf.reduce_sum(self.Zk*Zcoeff[0],axis=0)
             pupil_mag = tf.math.maximum(pupil_mag,0)
@@ -196,7 +198,7 @@ class PSFZernikeBased(PSFInterface):
 
         return I_model, pupil
     
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -206,7 +208,6 @@ class PSFZernikeBased(PSFInterface):
         z_center = (self.Zrange.shape[-3] - 1) // 2
         Zcoeff[0]=Zcoeff[0]*self.weight[4]
         Zcoeff[1]=Zcoeff[1]*self.weight[3]
-        #sigma = sigma*self.weight[5]
         bin = self.options.model.bin
         positions[:,1:] = positions[:,1:]/bin
         if self.initpupil is not None:
@@ -226,8 +227,8 @@ class PSFZernikeBased(PSFInterface):
             global_positions = np.swapaxes(np.vstack((positions[:,0]+z_center,centers[:,-2]-positions[:,-2],centers[:,-1]-positions[:,-1])),1,0)
 
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1], # already correct
-                intensities*self.weight[0], # already correct
+                backgrounds*self.weight[1],
+                intensities*self.weight[0],
                 I_model_bead,
                 I_model,
                 np.complex64(pupil),
@@ -235,9 +236,10 @@ class PSFZernikeBased(PSFInterface):
                 sigma,   
                 gxy*self.weight[2],
                 np.flip(I_model,axis=-3),
-                variables] # already correct
+                variables]
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization results to a dictionary with named fields."""
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

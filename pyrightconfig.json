@@ -1,0 +1,9 @@
+{
+  "typeCheckingMode": "basic",
+  "diagnosticMode": "openFilesOnly",
+  "useLibraryCodeForTypes": true,
+  "reportGeneralTypeIssues": "none",
+  "reportArgumentType": "none",
+  "reportUnknownMemberType": "none",
+  "reportAssignmentType": "none"
+}

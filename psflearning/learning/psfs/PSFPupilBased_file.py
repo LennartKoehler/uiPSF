@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 """
 Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
 All rights reserved     
 
 @author: Sheng Liu, Jonas Hellgoth
 """
+
+from typing import Any
 
 import numpy as np
 import scipy as sp
@@ -20,7 +24,7 @@ class PSFPupilBased(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self,options=None) -> None:
+    def __init__(self, options: Any = None) -> None:
         self.parameters = None
         self.data = None
         self.Zphase = None
@@ -33,7 +37,7 @@ class PSFPupilBased(PSFInterface):
         self.psftype = 'scalar'
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -60,11 +64,7 @@ class PSFPupilBased(PSFInterface):
             self.calpupilfield('vector')
         else:
             self.calpupilfield('scalar')
-        #self.sincfilter = np.sinc(np.sqrt(self.kspace_x))*np.sinc(np.sqrt(self.kspace_y))
         self.const_mag = options.model.const_pupilmag
-        #self.bead_kernel = tf.complex(self.data.bead_kernel,0.0)
-        #self.weight = np.array([np.median(init_intensities), 10, 0.1, 10, 10],dtype=np.float32)
-        #weight = [1e4,10] + list(np.array([0.1,5,2])/np.median(init_intensities)*2e4)
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -98,7 +98,7 @@ class PSFPupilBased(PSFInterface):
                 sigma.astype(np.float32),
                 gxy], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -110,7 +110,6 @@ class PSFPupilBased(PSFInterface):
             pupil_mag = tf.complex(1.0,0.0)
         else:
             pupil_mag = tf.complex(pupilR*self.weight[4],0.0)
-        #pupil = tf.complex(tf.math.cos(pupilI*self.weight[3]),tf.math.sin(pupilI*self.weight[3]))*pupil_mag*self.aperture*self.apoid
 
         if self.initpupil is not None:
             pupil = self.initpupil
@@ -150,7 +149,6 @@ class PSFPupilBased(PSFInterface):
         filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
         filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
         I_blur = im.ifft3d(im.fft3d(I_res)*self.bead_kernel*filter2)
-        #I_blur = im.ifft3d(im.fft3d(I_res)*filter2)
         I_blur = tf.expand_dims(tf.math.real(I_blur),axis=-1)
         
         kernel = np.ones((1,bin,bin,1,1),dtype=np.float32)
@@ -170,7 +168,8 @@ class PSFPupilBased(PSFInterface):
 
         return forward_images
 
-    def genpsfmodel(self,sigma,pupil,addbead=False):
+    def genpsfmodel(self, sigma: np.ndarray, pupil: Any, addbead: bool = False) -> tf.Tensor:
+        """Generate a PSF model from a pupil function with optional bead kernel convolution."""
         phiz = -1j*2*np.pi*self.kz*(self.Zrange+self.defocus)
         if self.psftype == 'vector':
             I_res = 0.0
@@ -199,7 +198,7 @@ class PSFPupilBased(PSFInterface):
 
         return I_model
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -218,7 +217,6 @@ class PSFPupilBased(PSFInterface):
 
         I_model = self.genpsfmodel(sigma,pupil)
         I_model_bead = self.genpsfmodel(sigma,pupil,addbead=True)
-        #I_model_bead = np.real(im.ifft3d(im.fft3d(I_res)*self.bead_kernel*filter2))
 
         images, _, centers, _ = self.data.get_image_data()
         if positions.shape[1]>3:
@@ -227,18 +225,19 @@ class PSFPupilBased(PSFInterface):
             global_positions = np.swapaxes(np.vstack((positions[:,0]+z_center,centers[:,-2]-positions[:,-2],centers[:,-1]-positions[:,-1])),1,0)
 
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1], # already correct
-                intensities*self.weight[0], # already correct
+                backgrounds*self.weight[1],
+                intensities*self.weight[0],
                 I_model_bead,
                 I_model,
                 np.complex64(pupil),
                 sigma,
                 gxy*self.weight[2],
                 np.flip(I_model,axis=-3),
-                variables] # already correct
+                variables]
 
 
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """Convert optimization results to a dictionary with named fields."""
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

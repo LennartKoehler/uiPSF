@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import scipy as sp
 import tensorflow as tf
@@ -14,7 +18,7 @@ class PSFPupilBased_vector_smlm(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self, options=None) -> None:
+    def __init__(self, options: Any | None = None) -> None:
         self.parameters = None
         self.data = None
 
@@ -26,7 +30,7 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         self.Zoffset = None
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -96,9 +100,6 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         else:
             self.n_max_mag = 100
 
-        
-        #self.weight = np.array([np.median(init_intensities), 10, 5, 10, 10, 5],dtype=np.float32) # [I, bg, pos, coeff, stagepos]
-        #weight = [1e4,10] + list(np.array([1,10,10,1])/np.median(init_intensities)*2e4)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
@@ -106,7 +107,6 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         self.weight = np.array(weight,dtype=np.float32)
         sigma = np.ones((2,))*self.options.model.blur_sigma*np.pi*self.options.model.bin
         self.init_sigma = sigma
-        #self.weight[6] = 1.0
         sigma = sigma / self.weight[6]
         self.pos_weight = self.weight[2]
 
@@ -134,7 +134,7 @@ class PSFPupilBased_vector_smlm(PSFInterface):
                 sigma.astype(np.float32), 
                 init_stagepos.astype(np.float32)], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -185,7 +185,10 @@ class PSFPupilBased_vector_smlm(PSFInterface):
 
         return forward_images
 
-    def estzoffset(self,Nz=None):
+    def estzoffset(self, Nz: int | None = None) -> None:
+        """
+        Estimate the z-offset of the PSF model by finding the center of the initial PSF.
+        """
         if Nz is None:
             Nz = np.int32(self.options.insitu.z_range/self.data.pixelsize_z+1)
         self.calpupilfield('vector', Nz,'insitu')
@@ -204,7 +207,10 @@ class PSFPupilBased_vector_smlm(PSFInterface):
 
         return
 
-    def estzernike(self,start_time = None):
+    def estzernike(self, start_time: Any | None = None) -> np.ndarray:
+        """
+        Estimate the best Zernike coefficient by evaluating a range of indices and amplitudes.
+        """
         pixelsize_z = np.array(self.data.pixelsize_z)
         init_sigma = np.ones((2,),dtype=np.float32)*self.options.model.blur_sigma*np.pi
 
@@ -234,7 +240,10 @@ class PSFPupilBased_vector_smlm(PSFInterface):
                     I_init_optim = I_init
         return I_init_optim
 
-    def genpsfmodel(self,sigma,Zcoeff=None,stagepos=None,pupil=None):
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeff: np.ndarray | None = None, stagepos: np.ndarray | None = None, pupil: tf.Tensor | None = None) -> np.ndarray:
+        """
+        Generate the PSF model from Zernike coefficients or a given pupil function.
+        """
         if pupil is None:
             pupil_mag = tf.abs(tf.reduce_sum(self.Zk*Zcoeff[0],axis=0))
             pupil_phase = tf.reduce_sum(self.Zk*Zcoeff[1],axis=0)
@@ -265,7 +274,10 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         
         return I_model
 
-    def partitiondata(self,zf,LL):
+    def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Partition the data into bins based on z-position and select top-likelihood ROIs per bin.
+        """
         _, rois, centers, frames = self.data.get_image_data()
         
         nbin = self.options.insitu.partition_size[0]
@@ -296,7 +308,7 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         self.data.frames = np.concatenate(fid,axis=0)
         return zf1, rois1_avg
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -313,24 +325,26 @@ class PSFPupilBased_vector_smlm(PSFInterface):
         positions[:,1:] = positions[:,1:]/bin
 
         I_model = self.genpsfmodel(sigma,stagepos=stagepos,pupil=pupil)
-        # calculate global positions in images since positions variable just represents the positions in the rois
         images, _, centers, _ = self.data.get_image_data()
         original_shape = images.shape[-3:]
         
         global_positions = np.swapaxes(np.vstack((positions[:,0],centers[:,-2]-positions[:,-2],centers[:,-1]-positions[:,-1])),1,0)
 
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1], # already correct
-                intensities*self.weight[0], # already correct
+                backgrounds*self.weight[1],
+                intensities*self.weight[0],
                 I_model,
                 np.complex64(pupil),
                 pupil_real,
                 sigma,
                 stagepos*self.data.pixelsize_z,
-                variables] # already correct
+                variables]
     
 
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary with labeled entries.
+        """
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

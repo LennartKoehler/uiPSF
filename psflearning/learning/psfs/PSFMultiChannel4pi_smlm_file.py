@@ -1,5 +1,6 @@
+from __future__ import annotations
 
-from typing import Type
+from typing import Any, Type
 
 import numpy as np
 from requests import options
@@ -17,7 +18,7 @@ from ..optimizers import OptimizerABC, L_BFGS_B
 from ..loclib import localizationlib
 
 class PSFMultiChannel4pi_smlm(PSFInterface):
-    def __init__(self, psftype: Type[PSFInterface], init_optimizer: OptimizerABC=None,options = None, loss_weight=None) -> None:
+    def __init__(self, psftype: Type[PSFInterface], init_optimizer: OptimizerABC | None = None, options: Any = None, loss_weight: Any = None) -> None:
         self.parameters = None
         self.updateflag = None        
         self.psftype = psftype
@@ -31,7 +32,7 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
         else:
             self.init_optimizer = init_optimizer
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         Since this is a multi-channel PSF, it performs an initial fitting for each
@@ -215,7 +216,7 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
 
 
 
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         """
@@ -246,8 +247,11 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
 
         return tf.stack(forward_images)
 
-    def calc_positions_from_trafos(self, init_subpixel_pos_ref_channel, trafos):
-        # calculate positions from position in ref channel and transformation
+    def calc_positions_from_trafos(self, init_subpixel_pos_ref_channel: tf.Tensor, trafos: np.ndarray) -> tf.Tensor:
+        """
+        Calculate positions for all channels from reference channel positions
+        and affine transformations.
+        """
         cor_target = tf.linalg.matmul(self.cor_ref_channel[:,self.ind[0]:self.ind[1]]-self.imgcenter, trafos)[..., :-1]
 
         diffs = tf.math.subtract(self.cor_other_channels[:,self.ind[0]:self.ind[1]]-self.imgcenter[:-1],cor_target)
@@ -255,7 +259,11 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
         positions = tf.concat((tf.expand_dims(init_subpixel_pos_ref_channel, axis=0), pos_other_channels), axis=0)
 
         return positions
-    def partitiondata(self,zf,LL):
+
+    def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Partition data into z bins and select highest-likelihood samples per bin.
+        """
         _, rois, centers, frames = self.data.get_image_data()
         Nchannel = len(rois)
         Nfit = LL.shape[0]
@@ -285,7 +293,7 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
             self.data.channels[k].frames = frames[k][rois1_id]
         return zf1,rois1_id, rois1_avg
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -327,7 +335,10 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
         return results
 
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary keyed by channel.
+        """
         res_dict = dict()
         for i,sub_psf in enumerate(self.sub_psfs):
             sub_res = []

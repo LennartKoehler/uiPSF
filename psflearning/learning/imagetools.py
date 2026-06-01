@@ -5,18 +5,36 @@ All rights reserved     Heintzmann Lab, Friedrich-Schiller-University Jena, Germ
 @author: Rainer Heintzmann, Sheng Liu
 """
 
+from __future__ import annotations
+
+import numbers
+import warnings
+from typing import Sequence
+
+try:
+    from typing import TypeGuard
+except ImportError:
+    from typing import Any
+    TypeGuard = Any
 
 import numpy as np
+import scipy.ndimage as ndimage
+from scipy import cluster as cluster
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
-import scipy.ndimage as ndimage
 from scipy.spatial import distance
-from scipy import cluster as cluster
-import warnings
-import numbers
 
 
-def extractMultiPeaks(im, ROIsize, sigma=None, threshold_rel=None, alternateImg=None, kernel=(3,3,3), borderDist=None, FOV=None):
+def extractMultiPeaks(
+    im: np.ndarray,
+    ROIsize: Sequence[int],
+    sigma: Sequence[float] | None = None,
+    threshold_rel: float | None = None,
+    alternateImg: np.ndarray | None = None,
+    kernel: tuple[int, ...] = (3, 3, 3),
+    borderDist: Sequence[int] | None = None,
+    FOV: Sequence[int] | None = None,
+) -> tuple[np.ndarray | None, np.ndarray]:
     """
     extracts ROIs around the local maxima in im after gaussian filtering
     :param im: image to extract from
@@ -56,7 +74,17 @@ def extractMultiPeaks(im, ROIsize, sigma=None, threshold_rel=None, alternateImg=
         ROIs = None
     return ROIs, centers
 
-def extractMultiPeaks_smlm(im, ROIsize, sigma=None, threshold_rel=None, alternateImg=None, kernel=(3,3,3), borderDist=None, min_dist=None,FOV=None):
+def extractMultiPeaks_smlm(
+    im: np.ndarray,
+    ROIsize: Sequence[int],
+    sigma: Sequence[float] | None = None,
+    threshold_rel: float | None = None,
+    alternateImg: np.ndarray | None = None,
+    kernel: tuple[int, ...] = (3, 3, 3),
+    borderDist: Sequence[int] | None = None,
+    min_dist: float | None = None,
+    FOV: Sequence[int] | None = None,
+) -> tuple[np.ndarray | None, np.ndarray]:
     """
     extracts ROIs around the local maxima in im after gaussian filtering
     :param im: image to extract from
@@ -99,7 +127,18 @@ def extractMultiPeaks_smlm(im, ROIsize, sigma=None, threshold_rel=None, alternat
         ROIs = None
     return ROIs, centers
     
-def localMax(img, threshold_rel=None, kernel=(3,3,3)):
+def localMax(
+    img: np.ndarray,
+    threshold_rel: float | None = None,
+    kernel: tuple[int, ...] = (3, 3, 3),
+) -> list[tuple[float, ...]]:
+    """Find local maxima in an image using a maximum filter.
+
+    :param img: input image
+    :param threshold_rel: relative threshold for peak detection
+    :param kernel: size of the maximum filter kernel
+    :return: list of center-of-mass coordinates for each detected peak
+    """
     imgMax = ndimage.maximum_filter(img, size=kernel)
     imgMax = (imgMax == img) * img # extracts only the local maxima but leaves the values in
     mask = imgMax==img
@@ -117,7 +156,11 @@ def localMax(img, threshold_rel=None, kernel=(3,3,3)):
     return coords
 
 
-def multiROIExtract(im, centers, ROIsize):
+def multiROIExtract(
+    im: np.ndarray,
+    centers: np.ndarray,
+    ROIsize: Sequence[int],
+) -> np.ndarray:
     """
     extracts multiple ROIs indicated by a list of center corrdinates and stacks them in another dimension
     :param im: image to extract from
@@ -138,16 +181,34 @@ def multiROIExtract(im, centers, ROIsize):
     return np.stack(listOfROIs)
 
 
-def multiROIExtract_smlm(im, centers, ROIsize):
+def multiROIExtract_smlm(
+    im: np.ndarray,
+    centers: np.ndarray,
+    ROIsize: Sequence[int],
+) -> np.ndarray:
+    """Extract multiple ROIs using direct indexing and stack them along a new dimension.
 
+    :param im: image to extract from
+    :param centers: array of center coordinates for each ROI
+    :param ROIsize: multidimensional size of the ROI to extract
+    :return: the stacked extractions along a new leading dimension
+    """
     listOfROIs = []
     for centerpos in centers:
         myROI = im[ROIcoords(centerpos, ROIsize, im.ndim)]
         listOfROIs.append(myROI)
     return np.stack(listOfROIs)
  
-def combine_close_cor(centers, min_dist):
+def combine_close_cor(
+    centers: np.ndarray,
+    min_dist: float,
+) -> np.ndarray:
+    """Combine center coordinates that are closer than min_dist using hierarchical clustering.
 
+    :param centers: array of center coordinates
+    :param min_dist: minimum distance threshold; clusters with linkage below this are merged
+    :return: array of averaged center coordinates, one per cluster
+    """
     dis = distance.pdist(centers)
     link = cluster.hierarchy.linkage(dis,'complete')
     Tc = cluster.hierarchy.fcluster(link,t=min_dist,criterion ='distance')
@@ -160,7 +221,14 @@ def combine_close_cor(centers, min_dist):
             cor[t] = centers[maskT]
 
     return cor
-def extract(img, ROIsize=None, centerpos=None, PadValue=0.0, checkComplex=True):
+
+def extract(
+    img: np.ndarray,
+    ROIsize: Sequence[int] | None = None,
+    centerpos: Sequence[int] | None = None,
+    PadValue: float | None = 0.0,
+    checkComplex: bool = True,
+) -> np.ndarray:
     '''
     EXTRACT a part in an n-dimensional array based on stating the destination ROI size and center in the source
     :param img: Input image
@@ -192,12 +260,14 @@ def extract(img, ROIsize=None, centerpos=None, PadValue=0.0, checkComplex=True):
         ROIsize = mysize
     else:
         ROIsize = expanddimvec(ROIsize, len(mysize), mysize)
+    assert ROIsize is not None
 
     mycenter = [sd // 2 for sd in mysize]
     if centerpos is None:
         centerpos = mycenter
     else:
         centerpos = coordsToPos(expanddimvec(centerpos, img.ndim, othersizes=mycenter), mysize)
+    assert centerpos is not None
 
     #    print(ROIcoords(centerpos,ROIsize,img.ndim))
     res = img[ROIcoords(centerpos, ROIsize, img.ndim)]
@@ -210,7 +280,13 @@ def extract(img, ROIsize=None, centerpos=None, PadValue=0.0, checkComplex=True):
         return resF
     
 
-def expanddimvec(shape, ndims, othersizes=None, trailing=False, value=1):
+def expanddimvec(
+    shape: Sequence[int] | int | None,
+    ndims: int,
+    othersizes: Sequence[int] | None = None,
+    trailing: bool = False,
+    value: int = 1,
+) -> tuple[int, ...] | None:
     '''
         expands an nd tuple (e.g image shape) to the necessary number of dimension by inserting leading (or trailing) dimensions
         ----------
@@ -225,26 +301,29 @@ def expanddimvec(shape, ndims, othersizes=None, trailing=False, value=1):
     if shape is None:
         return None
     if isinstance(shape,numbers.Number):
-        shape=(shape,)
+        result: tuple[int, ...] = (shape,)
     else:
-        shape=tuple(shape)
-    missingdims=ndims-len(shape)
+        result = tuple(shape)
+    missingdims=ndims-len(result)
     if missingdims > 0:
         if othersizes is None:
             if trailing:
-                return shape+(missingdims)*(value,)
+                return result+(missingdims)*(value,)
             else:
-                return (missingdims)*(value,)+shape
+                return (missingdims)*(value,)+result
         else:
             if trailing:
-                return shape+tuple(othersizes[-missingdims::])
+                return result+tuple(othersizes[-missingdims::])
             else:
-                return tuple(othersizes[0:missingdims])+shape
+                return tuple(othersizes[0:missingdims])+result
     else:
-        return shape[-ndims:]
+        return result[-ndims:]
 
 
-def coordsToPos(coords,ashape):
+def coordsToPos(
+    coords: Sequence[int],
+    ashape: Sequence[int],
+) -> list[int]:
     '''
         converts a coordinate vector to a list of all-positive number using a given shape.
 
@@ -258,7 +337,11 @@ def coordsToPos(coords,ashape):
 
 
 
-def ROIcoords(center,asize,ndim=None):
+def ROIcoords(
+    center: Sequence[int],
+    asize: Sequence[int],
+    ndim: int | None = None,
+) -> tuple[slice, ...]:
     """
         constructs a coordinate vector which can be used by numpy for an array acccess
         center: list or tuple of center coordinates
@@ -269,9 +352,9 @@ def ROIcoords(center,asize,ndim=None):
     if ndim==None:
         ndim=len(center)
 
-    slices=[]
+    slices: list[slice] = []
     if ndim>len(center):
-        slices=(ndim-len(center))*slice(None)
+        slices = [slice(None)] * (ndim - len(center))
     for d in range(ndim-len(center),ndim): # only specify the last dimensions
         asp = asize[d]
         if asp < 0:
@@ -284,7 +367,11 @@ def ROIcoords(center,asize,ndim=None):
 
 
 
-def expanddim(img, ndims, trailing=None):
+def expanddim(
+    img: np.ndarray,
+    ndims: int,
+    trailing: bool | None = None,
+) -> np.ndarray:
     """
         expands an nd image to the necessary number of dimension by inserting leading dimensions
         ----------
@@ -307,13 +394,31 @@ def expanddim(img, ndims, trailing=None):
 
 
 
-def unifysize(mysize):
+def unifysize(mysize: list | tuple | np.ndarray) -> list:
+    """Convert a size specification to a list.
+
+    :param mysize: a list, tuple, or numpy array representing a shape
+    :return: the shape as a list
+    """
     if isinstance(mysize, list) or isinstance(mysize, tuple) or isinstance(mysize, np.ndarray):
         return list(mysize)
     else:
         return list(mysize.shape)
 
-def ones(s, dtype=None, order='C', ax=None):
+def ones(
+    s: np.ndarray | Sequence[int],
+    dtype: np.dtype | type | None = None,
+    order: str = 'C',
+    ax: int | None = None,
+) -> np.ndarray:
+    """Create an array of ones, optionally casting to a specific dimensionality.
+
+    :param s: shape of the array, or an ndarray whose shape is used
+    :param dtype: desired data type
+    :param order: memory layout order
+    :param ax: if given, cast the result to have this many dimensions
+    :return: array of ones with the specified shape
+    """
     if isnp(s):
         s=s.shape
     res = np.ones(s,dtype,order)
@@ -321,11 +426,20 @@ def ones(s, dtype=None, order='C', ax=None):
         res = castdim(res, wanteddim=ax)
     return res
 
-def isnp(animg):
+def isnp(animg: object) -> TypeGuard[np.ndarray]:
+    """Check whether the given object is a numpy ndarray.
+
+    :param animg: object to check
+    :return: True if animg is an ndarray
+    """
     return isinstance(animg,np.ndarray)
 
 
-def castdim(img, ndims=None, wanteddim=0):
+def castdim(
+    img: np.ndarray,
+    ndims: int | None = None,
+    wanteddim: int = 0,
+) -> np.ndarray:
     """
         expands a 1D image to the necessary number of dimension casting the dimension to a wanted one
         it orients a vector along the -wanteddim direction
@@ -336,7 +450,11 @@ def castdim(img, ndims=None, wanteddim=0):
     """
     return np.reshape(img, castdimvec(img.shape, ndims, wanteddim))
 
-def castdimvec(mysize, ndims=None, wanteddim=0):
+def castdimvec(
+    mysize: Sequence[int],
+    ndims: int | None = None,
+    wanteddim: int = 0,
+) -> tuple[int, ...]:
     """
         expands a shape tuple to the necessary number of dimension casting the dimension to a wanted one
         ----------
@@ -363,7 +481,20 @@ def castdimvec(mysize, ndims=None, wanteddim=0):
 
 
 
-def zeros(s, dtype=None, order='C',  ax=None):
+def zeros(
+    s: np.ndarray | Sequence[int],
+    dtype: np.dtype | type | None = None,
+    order: str = 'C',
+    ax: int | None = None,
+) -> np.ndarray:
+    """Create an array of zeros, optionally casting to a specific dimensionality.
+
+    :param s: shape of the array, or an ndarray whose shape is used
+    :param dtype: desired data type
+    :param order: memory layout order
+    :param ax: if given, cast the result to have this many dimensions
+    :return: array of zeros with the specified shape
+    """
     if isnp(s):
         s = s.shape
     res = np.zeros(s, dtype, order)
@@ -371,7 +502,7 @@ def zeros(s, dtype=None, order='C',  ax=None):
         res = castdim(res, wanteddim=ax)
     return res
 
-def dimToPositive(dimpos,ndims):
+def dimToPositive(dimpos: int, ndims: int) -> int:
     """
         converts a dimension position to a positive number using a given length.
 
@@ -380,6 +511,5 @@ def dimToPositive(dimpos,ndims):
 
     """
     return dimpos+(dimpos<0)*ndims *ndims 
-
 
 

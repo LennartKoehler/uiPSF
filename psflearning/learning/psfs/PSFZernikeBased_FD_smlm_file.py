@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import scipy as sp
 import tensorflow as tf
@@ -15,7 +19,7 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
     """
-    def __init__(self, options=None) -> None:
+    def __init__(self, options: Any = None) -> None:
         self.parameters = None
         self.data = None
 
@@ -27,7 +31,7 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
         self.Zoffset = None
         return
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -141,7 +145,7 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
                 sigma.astype(np.float32), 
                 init_stagepos.astype(np.float32)], start_time
         
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
@@ -217,7 +221,11 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
 
         return forward_images
 
-    def estzoffset(self,Nz=None):
+    def estzoffset(self, Nz: int | None = None) -> None:
+        """
+        Estimate the z-offset by finding the focal plane position
+        within the Z-range of the PSF model.
+        """
         if Nz is None:
             Nz = np.int32(self.options.insitu.z_range/self.data.pixelsize_z+1)
         self.calpupilfield('vector', Nz,'insitu')
@@ -236,7 +244,11 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
 
         return
 
-    def estzernike(self,start_time = None):
+    def estzernike(self, start_time: float | None = None) -> np.ndarray:
+        """
+        Estimate the dominant Zernike coefficient by evaluating a range
+        of candidate modes and selecting the one with highest median log-likelihood.
+        """
         pixelsize_z = np.array(self.data.pixelsize_z)
         init_sigma = np.ones((2,),dtype=np.float32)*self.options.model.blur_sigma*np.pi
 
@@ -265,7 +277,11 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
                     I_init_optim = I_init
         return I_init_optim
 
-    def genpsfmodel(self,sigma,Zcoeff=None,Zmap=None,cor=None,stagepos=None,pupil=None):
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeff: np.ndarray | None = None, Zmap: np.ndarray | None = None, cor: np.ndarray | None = None, stagepos: np.ndarray | None = None, pupil: Any = None) -> tuple[np.ndarray, Any, Any]:
+        """
+        Generate a PSF model from Zernike coefficients or a Zernike map,
+        returning the intensity model, Zernike coefficients, and pupil function.
+        """
 
         if Zcoeff is not None:
             pupil_mag = tf.reduce_sum(self.Zk*Zcoeff[0],axis=0)
@@ -326,7 +342,11 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
         
         return I_model, Zcoeff, pupil
 
-    def partitiondata(self,zf,LL):
+    def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Partition data into spatial and z bins, selecting a fixed number of
+        highest-likelihood samples per bin.
+        """
         _, rois, centers, frames = self.data.get_image_data()
         
         nbin = self.options.insitu.partition_size[0]
@@ -378,7 +398,7 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
         self.data.frames = np.concatenate(fid,axis=0)
         return zf1, rois1_avg
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -420,7 +440,10 @@ class PSFZernikeBased_FD_smlm(PSFInterface):
                 variables] # already correct
     
 
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary with named fields.
+        """
         res_dict = dict(pos=res[0],
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),

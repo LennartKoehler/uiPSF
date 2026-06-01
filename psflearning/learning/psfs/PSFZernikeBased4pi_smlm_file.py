@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
@@ -13,7 +16,7 @@ from ..loclib import localizationlib
 
 
 class PSFZernikeBased4pi_smlm(PSFInterface):
-    def __init__(self, max_iter: int=None,options=None) -> None:
+    def __init__(self, max_iter: int | None = None, options: Any = None) -> None:
         
         self.parameters = None
         self.updateflag = None
@@ -31,7 +34,7 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
             self.max_iter = max_iter
 
 
-    def calc_initials(self, data: PreprocessedImageDataInterface,start_time=None):
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float | None = None) -> tuple[list, Any]:
         """
         Provides initial values for the optimizable varibales for the fitter class.
         """
@@ -129,7 +132,7 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
                 alpha.astype(np.float32)], start_time
 
 
-    def calc_forward_images(self, variables):
+    def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         """
@@ -201,7 +204,11 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
 
         return forward_images
 
-    def estzoffset(self,Nz=None):
+    def estzoffset(self, Nz: int | None = None) -> None:
+        """
+        Estimate the z-offset by finding the focal plane position
+        within the Z-range of the 4pi PSF model.
+        """
         if Nz is None:
             Nz = np.int32(self.options.insitu.z_range/self.data.pixelsize_z+1)
         self.calpupilfield('scalar', Nz)
@@ -228,7 +235,11 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
 
         return
 
-    def genpsfmodel(self,Zcoeffmag, Zcoeffphase, sigma, alpha, stagepos=None, sampleheight=None):
+    def genpsfmodel(self, Zcoeffmag: np.ndarray, Zcoeffphase: np.ndarray, sigma: np.ndarray, alpha: np.ndarray, stagepos: np.ndarray | None = None, sampleheight: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, Any, Any, Any]:
+        """
+        Generate a 4pi PSF model from Zernike magnitude and phase coefficients,
+        returning the PSF intensity, IAB model, and pupil functions.
+        """
         phase0 = np.reshape(np.array([-2/3,0,2/3])*np.pi+self.dphase,(3,1,1,1)).astype(np.float32)
         phase0 = tf.complex(tf.math.cos(phase0),tf.math.sin(phase0))
 
@@ -280,7 +291,10 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
 
         return psf_model[1], I_model[0], A_model, pupil1, pupil2
     
-    def partitiondata(self,zf,LL):
+    def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Partition data into z bins and select highest-likelihood samples per bin.
+        """
         _, rois, centers, frames = self.data.get_image_data()
         
         nbin = self.options.insitu.partition_size[0]
@@ -316,7 +330,7 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
         self.data.frames = np.concatenate(fid,axis=0)
         return zf1, rois1_avg, id
 
-    def postprocess(self, variables):
+    def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -360,7 +374,10 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
                 res]
 
     
-    def res2dict(self,res):
+    def res2dict(self, res: list) -> dict[str, Any]:
+        """
+        Convert optimization results to a dictionary with named fields.
+        """
         res_dict = dict(pos=res[0],                    
                         bg=np.squeeze(res[1]),
                         intensity=np.squeeze(res[2]),
