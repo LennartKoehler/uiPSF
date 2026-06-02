@@ -59,8 +59,7 @@ def learn_psf(
     param: DictConfig,
     dataobj,
     psf_info: dict,
-    time: Optional[float] = None,
-    load_initial_pupil_fn: Callable = Reader.load_initial_pupil,
+    time: Optional[float] = None
 ) -> tuple:
     """Run the PSF fitting optimisation.
 
@@ -86,7 +85,7 @@ def learn_psf(
     """
 
     psfobj = initialize_psf(param, psf_info)
-    load_initial_pupil_fn(param, psfobj, dataobj)
+    Reader.load_initial_pupil(param, psfobj, dataobj)
 
     lossfun = psf_info["loss_fun"]
     lossfunmulti = psf_info["loss_fun_multi"]

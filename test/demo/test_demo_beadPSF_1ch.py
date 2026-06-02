@@ -16,6 +16,8 @@ except Exception:
 
 L = PSFLearningLib()
 
+
+# -- SETUP --
 param = io.param.combine('config_base', psftype='zernike', channeltype='1ch', sysfile='M2')
 
 param.datapath = main_data_dir+'/1ch_40nm_bead/'
@@ -34,8 +36,13 @@ param.option.imaging.emission_wavelength = 0.6
 images = L.load_data(param)
 psf_info = L.get_psf_info(param)
 dataobj = L.prep_data(param, images)
+
+# -- RUN --
 for k in range(0, 1):
     psfobj, fitter, learning_result, loc_result = L.learn_psf(param, dataobj, psf_info, time=0)
+
+
+# -- SAVE --
 resfile = L.save_result(param, psfobj, dataobj, fitter, learning_result, loc_result)
 
 f, p = io.h5.load(resfile)

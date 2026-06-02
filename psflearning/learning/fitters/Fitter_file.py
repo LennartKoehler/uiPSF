@@ -45,7 +45,7 @@ class Fitter(FitterInterface):
         self.loss_weight = loss_weight
         return
 
-    def objective(
+    def __objective(
         self,
         variables: List[np.ndarray],
         mu: float,
@@ -106,7 +106,7 @@ class Fitter(FitterInterface):
         #self.optimizer.weight = self.psf.weight
         pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
 
-        variables = self.optimizer.minimize(self.objective, variables, self.psf.varinfo, pbar)
+        variables = self.optimizer.minimize(self.__objective, variables, self.psf.varinfo, pbar)
         toc = pbar.postfix[-1]['time']
         pbar.close()
         # save final state of forward images to access from easily from outside
