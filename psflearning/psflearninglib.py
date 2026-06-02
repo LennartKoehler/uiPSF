@@ -135,7 +135,22 @@ class PSFLearningLib:
         Returns
         -------
         tuple
-            ``(psfobj, fitter, learning_result, loc_result)``
+            ``(psfobj, fitter, learning_result)``
+
+        See :func:`fitting.learn_psf`.
+        """
+        return learn_psf(param, dataobj, psf_info, time=time)
+
+    @staticmethod
+    def localize_psf(
+        param: DictConfig, dataobj, psf_info: dict, time: Optional[float] = None
+    ) -> tuple:
+        """Run bead localization.
+
+        Returns
+        -------
+        tuple
+            ``(loc_result)``
 
         See :func:`fitting.learn_psf`.
         """

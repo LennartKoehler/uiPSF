@@ -13,7 +13,7 @@ from tkinter import messagebox as mbox
 import sys
 from typing import Any
 
-from .PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PreprocessedImageDataInterface import PreprocessedImageDataInterface
 
 class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
     """

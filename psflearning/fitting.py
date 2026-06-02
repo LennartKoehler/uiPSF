@@ -16,7 +16,7 @@ import numpy as np
 from .reader import Reader
 from omegaconf import DictConfig
 
-from .learning import Fitter, L_BFGS_B
+from .learning import PSFLearner, Localizer, L_BFGS_B
 
 
 def initialize_psf(param: DictConfig, psf_info: dict):
@@ -55,12 +55,36 @@ def initialize_psf(param: DictConfig, psf_info: dict):
     return psfobj
 
 
+def create_learner(
+    param: DictConfig,
+    dataobj,
+    psfobj,
+    psf_info: dict,
+) -> PSFLearner:
+    """Create a PSFLearner instance with configured optimizer and loss functions."""
+    lossfun = psf_info["loss_fun"]
+    lossfunmulti = psf_info["loss_fun_multi"]
+    w = list(param.loss_weight.values())
+
+    optimizer = L_BFGS_B(maxiter=param.iteration)
+    optimizer.batch_size = param.batch_size
+
+    if lossfunmulti:
+        return PSFLearner(
+            dataobj, psfobj, optimizer, lossfunmulti,
+            loss_func_single=lossfun, loss_weight=w,
+        )
+    else:
+        return PSFLearner(dataobj, psfobj, optimizer, lossfun, loss_weight=w)
+
+
 def learn_psf(
     param: DictConfig,
     dataobj,
     psf_info: dict,
-    time: Optional[float] = None
-) -> tuple:
+    time: Optional[float] = None,
+    do_voxel_refit: bool = True,
+) -> Tuple:
     """Run the PSF fitting optimisation.
 
     Parameters
@@ -73,72 +97,184 @@ def learn_psf(
         As returned by :func:`psf_registry.get_psf_info`.
     time : float, optional
         Start-time stamp for progress reporting.
-    load_initial_pupil_fn : callable, optional
-        Function ``f(param, psfobj, dataobj) -> None`` that loads
-        initial pupil state.  Defaults to
-        :meth:`Reader.load_initial_pupil` when *None*.
+    do_voxel_refit : bool, optional
+        Whether to perform voxel-based refit after initial learning. Default True.
 
     Returns
     -------
-    tuple of (PSFInterface, Fitter, list, list)
-        ``(psfobj, fitter, learning_result, loc_result)``
+    tuple of (PSFInterface, PSFLearner, list, float)
+        ``(psfobj, learner, learning_result, toc)`` where toc is the end time.
     """
-
     psfobj = initialize_psf(param, psf_info)
     Reader.load_initial_pupil(param, psfobj, dataobj)
 
-    lossfun = psf_info["loss_fun"]
-    lossfunmulti = psf_info["loss_fun_multi"]
-    w = list(param.loss_weight.values())
+    learner = create_learner(param, dataobj, psfobj, psf_info)
 
-    optimizer = L_BFGS_B(maxiter=param.iteration)
-    optimizer.batch_size = param.batch_size
+    _, _, centers, _ = dataobj.get_image_data()
 
-    if lossfunmulti:
-        fitter = Fitter(
-            dataobj, psfobj, optimizer, lossfunmulti,
-            loss_func_single=lossfun, loss_weight=w,
+    res, toc = learner.learn_psf(start_time=time)
+
+    if do_voxel_refit and param.PSFtype == "voxel":
+        res, toc = _refit_voxel(
+            res, centers, dataobj, learner,
+            param.roi.roi_size, time,
+        )
+
+    return psfobj, learner, res, toc
+
+
+def create_localizer(learner: PSFLearner) -> Localizer:
+    """Create a Localizer instance from a PSFLearner's state."""
+    return Localizer(
+        data=learner.data,
+        psf=learner.psf,
+        rois=learner.rois,
+        forward_images=learner.forward_images,
+    )
+
+
+def localize(
+    learner: PSFLearner,
+    res: list,
+    toc: float,
+    param: DictConfig,
+) -> Tuple[list, list, float]:
+    """Perform localization using the learned PSF.
+
+    Parameters
+    ----------
+    learner : PSFLearner
+        The learner instance with fitted PSF.
+    res : list
+        Learning result (optimized variables).
+    toc : float
+        End time from learning.
+    param : DictConfig
+        Experiment parameters.
+
+    Returns
+    -------
+    tuple of (res, locres, toc)
+        Updated learning result, localization result, and end time.
+    """
+    localizer = create_localizer(learner)
+
+    _, _, _, file_idxs = learner.data.get_image_data()
+    channeltype = param.channeltype
+
+    if len(file_idxs) == 1:
+        locres = localizer.localize(
+            res, channeltype,
+            usecuda=param.usecuda,
+            plot=param.plotall,
+            start_time=toc,
+        )
+        return res, locres, toc
+
+    return _localize_with_relearn(learner, localizer, res, toc, param)
+
+
+def _localize_with_relearn(
+    learner: PSFLearner,
+    localizer: Localizer,
+    res: list,
+    toc: float,
+    param: DictConfig,
+) -> Tuple[list, list, float]:
+    """Internal: localization with outlier rejection and re-learning."""
+    channeltype = param.channeltype
+    psf_type = param.PSFtype
+    rej_threshold = list(param.rej_threshold.values())
+
+    if "insitu" in psf_type:
+        res1, toc = learner.relearn_smlm(
+            res, localizer, channeltype, rej_threshold, start_time=toc,
+        )
+        localizer.rois = learner.rois
+        localizer.forward_images = learner.forward_images
+        locres = localizer.localize_smlm(res1, channeltype, plot=param.plotall)
+    else:
+        locres = localizer.localize(
+            res, channeltype,
+            usecuda=param.usecuda,
+            plot=param.plotall,
+            start_time=toc,
+        )
+        toc = locres[-2]
+
+        res1, toc = learner.relearn(
+            res, localizer, channeltype, rej_threshold, start_time=toc,
+        )
+
+        if res1[0].shape[-2] < res[0].shape[-2]:
+            localizer.rois = learner.rois
+            localizer.forward_images = learner.forward_images
+            locres = localizer.localize(
+                res1, channeltype,
+                usecuda=param.usecuda,
+                plot=param.plotall,
+                start_time=toc,
+            )
+
+    return res1, locres, toc
+
+
+def relearn(
+    learner: PSFLearner,
+    localizer: Localizer,
+    res: list,
+    toc: float,
+    param: DictConfig,
+    threshold: Optional[list] = None,
+) -> Tuple[list, float]:
+    """Re-learn PSF after rejecting outliers based on localization metrics.
+
+    Parameters
+    ----------
+    learner : PSFLearner
+        The learner instance.
+    localizer : Localizer
+        Localizer instance with computed rejection metrics.
+    res : list
+        Current learning result.
+    toc : float
+        Current end time.
+    param : DictConfig
+        Experiment parameters.
+    threshold : list, optional
+        Custom rejection thresholds. If None, uses param.rej_threshold.
+
+    Returns
+    -------
+    tuple of (res, toc)
+        Updated learning result and end time.
+    """
+    if threshold is None:
+        threshold = list(param.rej_threshold.values())
+
+    channeltype = param.channeltype
+    psf_type = param.PSFtype
+
+    if "insitu" in psf_type:
+        return learner.relearn_smlm(
+            res, localizer, channeltype, threshold, start_time=toc,
         )
     else:
-        fitter = Fitter(dataobj, psfobj, optimizer, lossfun, loss_weight=w)
-
-    _, _, centers, file_idxs = dataobj.get_image_data()
-    centers = np.stack(centers)
-
-    res, toc = fitter.learn_psf(start_time=time)
-
-    res = _maybe_refit_voxel(
-        res, centers, dataobj, fitter,
-        param.roi.roi_size, param.PSFtype, time,
-    )
-
-    learning_result, loc_result = _localize(
-        res, fitter, toc,
-        file_idxs=file_idxs,
-        channeltype=param.channeltype,
-        psf_type=param.PSFtype,
-        rej_threshold=list(param.rej_threshold.values()),
-        usecuda=param.usecuda,
-        showplot=param.plotall,
-    )
-
-    return psfobj, fitter, learning_result, loc_result
+        return learner.relearn(
+            res, localizer, channeltype, threshold, start_time=toc,
+        )
 
 
-def _maybe_refit_voxel(
-    res, centers, dataobj, fitter, roi_size, psf_type, time
+def _refit_voxel(
+    res, centers, dataobj, learner, roi_size, time
 ):
-    """If the PSF type is *voxel* and z-drift is large, re-cut ROIs and
-    re-fit."""
-    if psf_type != "voxel":
-        return res
-
+    """If the PSF type is *voxel* and z-drift is large, re-cut ROIs and re-fit."""
     pos = res[-1][0]
     zpos = pos[:, 0:1]
     zpos = zpos - np.mean(zpos)
 
     if centers.shape[-1] != 3 or np.max(np.abs(zpos)) <= 2:
-        return res
+        return res, time
 
     cor = dataobj.centers
     if dataobj.skew_const:
@@ -162,59 +298,34 @@ def _maybe_refit_voxel(
     if dataobj.skew_const:
         dataobj.deskew_roi(roi_size)
 
-    fitter.dataobj = dataobj
-    res, _ = fitter.learn_psf(start_time=time)
-    return res
-
-
-def _localize(
-    res, fitter, toc, *, file_idxs, channeltype, psf_type,
-    rej_threshold, usecuda, showplot,
-):
-    """Perform localisation (and optional outlier-removal + re-learning)."""
-    if len(file_idxs) == 1:
-        locres = fitter.localize(
-            res, channeltype, usecuda=usecuda, plot=showplot,
-            start_time=toc,
-        )
-        return res, locres
-
-    if "insitu" in psf_type:
-        res1, toc = fitter.relearn_smlm(
-            res, channeltype, rej_threshold, start_time=toc,
-        )
-        locres = fitter.localize_smlm(res1, channeltype, plot=showplot)
-    else:
-        locres = fitter.localize(
-            res, channeltype, usecuda=usecuda, plot=showplot,
-            start_time=toc,
-        )
-        toc = locres[-2]
-        res1, toc = fitter.relearn(
-            res, channeltype, rej_threshold, start_time=toc,
-        )
-        if res1[0].shape[-2] < res[0].shape[-2]:
-            locres = fitter.localize(
-                res1, channeltype, usecuda=usecuda, plot=showplot,
-                start_time=toc,
-            )
-        else:
-            locres = locres
-
-    return res1, locres
+    learner.data = dataobj
+    res, toc = learner.learn_psf(start_time=time)
+    return res, toc
 
 
 def localize_FD(
-    param: DictConfig, learning_result, fitter, initz=None
+    param: DictConfig, learning_result, learner, initz=None
 ):
     """Localise in the Fourier domain.
+
+    Parameters
+    ----------
+    param : DictConfig
+        Experiment parameters.
+    learning_result : list
+        Learning result from learn_psf.
+    learner : PSFLearner
+        The learner instance.
+    initz : optional
+        Initial z offset for localization.
 
     Returns
     -------
     loc_FD
         Localisation result in the Fourier domain.
     """
-    return fitter.localize_FD(
+    localizer = create_localizer(learner)
+    return localizer.localize_FD(
         learning_result, param.channeltype,
         usecuda=param.usecuda, initz=initz, plot=param.plotall,
     )
@@ -258,7 +369,6 @@ def iterlearn_psf(
     """
     min_photon = param.option.insitu.min_photon
     iterN = param.option.insitu.repeat
-    channeltype = param.channeltype
     savename = param.savename
     loc_FD = None
     psf_info = get_psf_info_fn(param)
@@ -267,15 +377,20 @@ def iterlearn_psf(
         if nn > 0:
             dataobj.resetdata()
 
-        psfobj, fitter, learning_result, loc_result = learn_psf_fn(
+        psfobj, learner, learning_result, toc = learn_psf_fn(
             param, dataobj, psf_info, time=time,
-            load_initial_pupil_fn=load_initial_pupil_fn,
         )
+
+        localizer = create_localizer(learner)
+        _, _, _, file_idxs = learner.data.get_image_data()
+
+        if len(file_idxs) > 1:
+            _, learning_result, toc = localize(learner, learning_result, toc, param)
 
         param.savename = savename + str(nn)
         resfile = save_result_fn(
-            param, psfobj, dataobj, fitter,
-            learning_result, loc_result, loc_FD,
+            param, psfobj, dataobj, learner,
+            learning_result, None, loc_FD,
         )
         param.option.model.init_pupil_file = resfile
         param.option.insitu.min_photon = max(min_photon - nn * 0.1, 0.2)
@@ -299,3 +414,45 @@ def _update_stage_pos(psfobj, learning_result, dataobj, param):
             )
         except (KeyError, TypeError):
             pass
+
+
+def learn_and_localize(
+    param: DictConfig,
+    dataobj,
+    psf_info: dict,
+    time: Optional[float] = None,
+) -> Tuple:
+    """Convenience function that runs full pipeline: learn PSF, then localize.
+
+    Parameters
+    ----------
+    param : DictConfig
+        Experiment parameters.
+    dataobj : PreprocessedImageData
+        Prepared data object with extracted ROIs.
+    psf_info : dict
+        As returned by :func:`psf_registry.get_psf_info`.
+    time : float, optional
+        Start-time stamp for progress reporting.
+
+    Returns
+    -------
+    tuple of (PSFInterface, PSFLearner, Localizer, list, list)
+        ``(psfobj, learner, localizer, learning_result, loc_result)``
+    """
+    psfobj, learner, res, toc = learn_psf(param, dataobj, psf_info, time=time)
+    localizer = create_localizer(learner)
+
+    _, _, _, file_idxs = learner.data.get_image_data()
+
+    if len(file_idxs) == 1:
+        locres = localizer.localize(
+            res, param.channeltype,
+            usecuda=param.usecuda,
+            plot=param.plotall,
+            start_time=toc,
+        )
+        return psfobj, learner, localizer, res, locres
+
+    res, locres, toc = _localize_with_relearn(learner, localizer, res, toc, param)
+    return psfobj, learner, localizer, res, locres

@@ -15,7 +15,7 @@ class FitterInterface:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def objective(self, variables: list) -> list:
+    def __objective(self, variables: list) -> list:
         """
         Defines the objective that is optimized. In general, calculates the loss from forward images and real images
         and return the loss and its graient.

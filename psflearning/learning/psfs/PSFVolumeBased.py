@@ -5,8 +5,8 @@ from typing import Any
 import numpy as np
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PSFInterface import PSFInterface
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_real
 from .. import utilities as im
 from .. import imagetools as nip

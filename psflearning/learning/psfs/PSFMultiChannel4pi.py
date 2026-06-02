@@ -6,14 +6,13 @@ import numpy as np
 from requests import options
 import scipy as sp
 import tensorflow as tf
-from psflearning.learning.psfs.PSFPupilBased4pi_file import PSFPupilBased4pi
+from psflearning.learning.psfs.PSFPupilBased4pi import PSFPupilBased4pi
+from psflearning.learning.psfs.PSFVolumeBased4pi import PSFVolumeBased4pi
+from psflearning.learning.psfs.PSFZernikeBased4pi import PSFZernikeBased4pi
 
-from psflearning.learning.psfs.PSFVolumeBased4pi_file import PSFVolumeBased4pi
-from psflearning.learning.psfs.PSFZernikeBased4pi_file import PSFZernikeBased4pi
-
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
-from ..fitters.Fitter_file import Fitter
+from .PSFInterface import PSFInterface
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from ..fitters.PSFLearner import PSFLearner
 from ..optimizers import OptimizerABC, L_BFGS_B
 
 class PSFMultiChannel4pi(PSFInterface):
@@ -47,7 +46,7 @@ class PSFMultiChannel4pi(PSFInterface):
         ref_psf = self.psftype(options=self.options)
         ref_psf.dphase = 0.0
         self.sub_psfs[0] = ref_psf
-        fitter_ref_channel = Fitter(self.data.get_channel(0), ref_psf,self.init_optimizer, ref_psf.default_loss_func,loss_weight=self.loss_weight)
+        fitter_ref_channel = PSFLearner(self.data.get_channel(0), ref_psf,self.init_optimizer, ref_psf.default_loss_func,loss_weight=self.loss_weight)
         res_ref, toc = fitter_ref_channel.learn_psf(start_time=start_time)
         ref_pos = res_ref[0]        
         ref_pos_yx1 = np.concatenate((ref_pos[:, 1:], np.ones((ref_pos.shape[0], 1))), axis=1)
@@ -64,7 +63,7 @@ class PSFMultiChannel4pi(PSFInterface):
                 current_psf.dphase = i*np.pi/2
             else:
                 current_psf.dphase = -i*np.pi/2
-            fitter_current_channel = Fitter(self.data.get_channel(i), current_psf, self.init_optimizer,current_psf.default_loss_func,loss_weight=self.loss_weight)
+            fitter_current_channel = PSFLearner(self.data.get_channel(i), current_psf, self.init_optimizer,current_psf.default_loss_func,loss_weight=self.loss_weight)
             res_cur, toc = fitter_current_channel.learn_psf(start_time=toc)
             current_pos = res_cur[0]
             current_pos_yx1 = np.concatenate((current_pos[:, 1:], np.ones((current_pos.shape[0], 1))), axis=1)            

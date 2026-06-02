@@ -6,13 +6,13 @@ import numpy as np
 import scipy as sp
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PSFZernikeBase import PSFZernikeBase
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_real_zernike
 from .. import utilities as im
 from .. import imagetools as nip
 
-class PSFZernikeBased(PSFInterface):
+class PSFZernikeBased(PSFZernikeBase):
     """
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
@@ -51,7 +51,7 @@ class PSFZernikeBased(PSFInterface):
         N = rois.shape[0]
         Nz = rois.shape[-3]
         Lx = rois.shape[-1]
-        
+
         if self.psftype=='vector':
             self.calpupilfield('vector')
         else:
@@ -60,19 +60,31 @@ class PSFZernikeBased(PSFInterface):
             self.n_max_mag = 0
         else:
             self.n_max_mag = 100
-     
+
 
         init_backgrounds[init_backgrounds<0.1] = 0.1
         bgmean = np.median(init_backgrounds)
         wI = np.lib.scimath.sqrt(np.median(init_intensities))
-        weight = [wI*100,bgmean] + list(np.array([1,0.5,0.5])/wI*40)
-        self.weight = np.array(weight,dtype=np.float32)
+
+        self.weight = {"intensity" : wI * 100,
+                       "background" : bgmean,
+                       "drift" : 1 / wI * 40,
+                       "zernikeMagnitude" : 0.5 / wI * 40,
+                       "zernikePhase" : 0.5 / wI * 40}
+
         sigma = np.ones((2,))*self.options.model.blur_sigma*np.pi
         self.init_sigma = sigma
-        init_Zcoeff = np.zeros((2,self.Zk.shape[0],1,1))
-        init_Zcoeff[:,0,0,0] = [1,0]/self.weight[4]
-        init_backgrounds = np.ones((N,1,1,1),dtype = np.float32)*np.median(init_backgrounds,axis=0, keepdims=True) / self.weight[1]
-        gxy = np.zeros((N,2),dtype=np.float32) 
+        # init_Zcoeff = np.zeros((2,self.Zk.shape[0],1,1))
+        # init_Zcoeff[:,0,0,0] = [1,0]/self.weight["zernikePhase"]
+
+        init_Zcoeff_magnitude = np.zeros((self.Zk.shape[0],1,1))
+        init_Zcoeff_phase = np.zeros((self.Zk.shape[0],1,1))
+
+        init_Zcoeff_magnitude[0,0,0] = 1/self.weight["zernikePhase"]
+        # init_Zcoeff_phase[0,0,0] = 0
+
+        init_backgrounds = np.ones((N,1,1,1),dtype = np.float32)*np.median(init_backgrounds,axis=0, keepdims=True) / self.weight["background"]
+        gxy = np.zeros((N,2),dtype=np.float32)
         gI = np.ones((N,Nz,1,1),dtype = np.float32)*init_intensities
 
         self.varinfo = [dict(type='Nfit',id=0),
@@ -81,133 +93,101 @@ class PSFZernikeBased(PSFInterface):
                    dict(type='shared'),
                    dict(type='shared'),
                    dict(type='Nfit',id=0)]
-        
+
         if options.model.var_photon:
-            init_Intensity = gI/self.weight[0]
+            init_Intensity = gI/self.weight["intensity"]
         else:
-            init_Intensity = init_intensities / self.weight[0]
+            init_Intensity = init_intensities / self.weight["intensity"]
         return [init_positions.astype(np.float32),
                 init_backgrounds.astype(np.float32),
                 init_Intensity.astype(np.float32),
-                init_Zcoeff.astype(np.float32),
+                init_Zcoeff_magnitude.astype(np.float32),
+                init_Zcoeff_phase.astype(np.float32),
                 sigma.astype(np.float32),
                 gxy], start_time
-        
+
     def calc_forward_images(self, variables: list) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
         """
+        pos, backgrounds, intensities, zCoeff_magnitude, zCoeff_phase, sigma, gxy = variables
 
-        pos, backgrounds, intensities, Zcoeff, sigma, gxy = variables
-        c1 = self.spherical_terms
-        n_max = self.n_max_mag
-        Nk = np.min(((n_max+1)*(n_max+2)//2,self.Zk.shape[0]))
-        mask = c1<Nk
-        c1 = c1[mask]
-
-        if self.options.model.symmetric_mag:
-            pupil_mag =tf.reduce_sum(self.Zk[c1]*tf.gather(Zcoeff[0],indices=c1)*self.weight[4],axis=0)
-        else:
-            pupil_mag = tf.reduce_sum(self.Zk[0:Nk]*Zcoeff[0][0:Nk]*self.weight[4],axis=0)
-        pupil_mag = tf.math.maximum(pupil_mag,0)
-        pupil_phase = tf.reduce_sum(self.Zk[3:]*Zcoeff[1][3:]*self.weight[3],axis=0)
         if self.initpupil is not None:
             pupil = self.initpupil
         else:
-            pupil = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*self.apoid
-                
-        Nz = self.Zrange.shape[0]
+            pupil = self.compute_pupil_from_zernike(
+                zCoeff_magnitude, zCoeff_phase, self.weight["zernikeMagnitude"], self.weight["zernikePhase"]
+            )
 
-        pos = tf.complex(tf.reshape(pos,pos.shape+(1,1,1)),0.0)
+        pos = tf.complex(tf.reshape(pos, pos.shape + (1, 1, 1)), 0.0)
 
-        phiz = -1j*2*np.pi*self.kz*(pos[:,0]+self.Zrange+self.defocus)
-        if pos.shape[1]>3:
-            phixy = 1j*2*np.pi*self.ky*pos[:,2]+1j*2*np.pi*self.kx*pos[:,3]
-            phiz = 1j*2*np.pi*(self.kz_med*pos[:,1]-self.kz*(pos[:,0]+self.Zrange))
-        else:
-            phixy = 1j*2*np.pi*self.ky*pos[:,1]+1j*2*np.pi*self.kx*pos[:,2]
-            
-        if self.psftype == 'vector':
-            I_res = 0.0
-            for h in self.dipole_field:
-                PupilFunction = pupil*tf.exp(phiz+phixy)*h
-                psfA = im.cztfunc1(PupilFunction,self.paramxy)      
-                I_res += psfA*tf.math.conj(psfA)*self.normf
-        else:
-            PupilFunction = pupil*tf.exp(phiz+phixy)
-            I_res = im.cztfunc1(PupilFunction,self.paramxy)
-            I_res = I_res*tf.math.conj(I_res)*self.normf
+        phase_z, phase_xy = self.__compute_phase(
+                pos,
+                self.Zrange,
+                self.defocus,
+                self.kx,
+                self.ky,
+                self.kz,
+                self.kz_med)
+
+        I_res = self.propagate_pupil(pupil, phase_z, phase_xy)
+
         bin = self.options.model.bin
         if not self.options.model.var_blur:
             sigma = self.init_sigma
-        
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
-        I_blur = im.ifft3d(im.fft3d(I_res)*self.bead_kernel*filter2)
-        I_blur = tf.expand_dims(tf.math.real(I_blur),axis=-1)
-        kernel = np.ones((1,bin,bin,1,1),dtype=np.float32)
-        I_blur_bin = tf.nn.convolution(I_blur,kernel,strides=(1,1,bin,bin,1),padding='SAME',data_format='NDHWC')
 
-        psf_fit = I_blur_bin[...,0]
-        st = (self.bead_kernel.shape[0]-self.data.rois[0].shape[-3])//2
-        psf_fit = psf_fit[:,st:Nz-st]
+        I_blur = self.apply_blur_3d(I_res, sigma, use_bead_kernel=True)
+        I_blur_bin = self.bin_image_3d(I_blur, bin)
+        psf_fit = I_blur_bin[..., 0]
+        psf_fit = self.trim_z_padding(psf_fit)
 
         if self.options.model.estimate_drift:
-            gxy = gxy*self.weight[2]
-            psf_shift = self.applyDrfit(psf_fit,gxy)
-            forward_images = psf_shift*intensities*self.weight[0] + backgrounds*self.weight[1]
+            gxy = gxy * self.weight["drift"]
+            psf_shift = self.applyDrift(psf_fit, gxy)
+            forward_images = psf_shift * intensities * self.weight["intenity"] + backgrounds * self.weight["background"]
         else:
-            forward_images = psf_fit*intensities*self.weight[0] + backgrounds*self.weight[1]
+            forward_images = psf_fit * intensities * self.weight["intensity"] + backgrounds * self.weight["background"]
 
         return forward_images
 
 
-    def genpsfmodel(self, sigma: np.ndarray, Zcoeff: np.ndarray | None = None, pupil: Any = None, addbead: bool = False) -> tuple[tf.Tensor, Any]:
+    def genpsfmodel(self, sigma: np.ndarray, Zcoeff_magnitude: tf.Tenosor = None, Zcoeff_phase: tf.Tensor = None, pupil: Any = None, addbead: bool = False) -> tuple[tf.Tensor, Any]:
         """Generate a PSF model from Zernike coefficients or a given pupil function."""
         if pupil is None:
-            pupil_mag = tf.reduce_sum(self.Zk*Zcoeff[0],axis=0)
-            pupil_mag = tf.math.maximum(pupil_mag,0)
-            pupil_phase = tf.reduce_sum(self.Zk*Zcoeff[1],axis=0)
-            pupil = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*self.apoid
+            pupil_mag = tf.reduce_sum(self.Zk * Zcoeff_magnitude, axis=0)
+            pupil_mag = tf.math.maximum(pupil_mag, 0)
+            pupil_phase = tf.reduce_sum(self.Zk * Zcoeff_phase, axis=0)
+            pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
-        phiz = -1j*2*np.pi*self.kz*(self.Zrange+self.defocus)
-        if self.psftype == 'vector':
-            I_res = 0.0
-            for h in self.dipole_field:
-                PupilFunction = pupil*tf.exp(phiz)*h
-                psfA = im.cztfunc1(PupilFunction,self.paramxy)      
-                I_res += psfA*tf.math.conj(psfA)*self.normf
-        else:
-            PupilFunction = pupil*tf.exp(phiz)
-            I_res = im.cztfunc1(PupilFunction,self.paramxy)      
-            I_res = I_res*tf.math.conj(I_res)*self.normf
-        
+        phiz = -1j * 2 * np.pi * self.kz * (self.Zrange + self.defocus)
+        phase_z = tf.exp(phiz)
+        I_res = self.propagate_pupil(pupil, phase_z)
+
         bin = self.options.model.bin
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
-        if addbead:
-            I_blur = np.real(im.ifft3d(im.fft3d(I_res)*filter2*self.bead_kernel))
-        else:
-            I_blur = np.real(im.ifft3d(im.fft3d(I_res)*filter2))
+        I_blur = self.apply_blur_3d(I_res, sigma, use_bead_kernel=addbead)
 
-        I_blur = tf.expand_dims(tf.math.real(I_blur),axis=-1)
-        kernel = np.ones((bin,bin,1,1),dtype=np.float32)
-        I_model = tf.nn.convolution(I_blur,kernel,strides=(1,bin,bin,1),padding='SAME',data_format='NHWC')
-        I_model = I_model[...,0]
+        if len(I_blur.shape) == 5:
+            I_model = self.bin_image_3d(I_blur, bin)
+        else:
+            kernel = np.ones((bin, bin, 1, 1), dtype=np.float32)
+            I_model = tf.nn.convolution(I_blur, kernel, strides=(1, bin, bin, 1), padding='SAME', data_format='NHWC')
+        I_model = I_model[..., 0]
 
         return I_model, pupil
-    
+
     def postprocess(self, variables: list) -> list:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
         psf and adapts intensities and background accordingly.
         """
-        positions, backgrounds, intensities, Zcoeff,sigma,gxy = variables
+        positions, backgrounds, intensities, Zcoeff_magnitude, Zcoeff_phase, sigma,gxy = variables
         z_center = (self.Zrange.shape[-3] - 1) // 2
-        Zcoeff[0]=Zcoeff[0]*self.weight[4]
-        Zcoeff[1]=Zcoeff[1]*self.weight[3]
+
+        Zcoeff_magnitude = Zcoeff_magnitude * self.weight["zernikeMagnitude"]
+        Zcoeff_phase = Zcoeff_phase * self.weight["zernikePhase"]
+
         bin = self.options.model.bin
         positions[:,1:] = positions[:,1:]/bin
         if self.initpupil is not None:
@@ -215,8 +195,8 @@ class PSFZernikeBased(PSFInterface):
             I_model, _ = self.genpsfmodel(sigma,pupil=pupil)
             I_model_bead, _ = self.genpsfmodel(sigma,pupil=pupil,addbead=True)
         else:
-            I_model, pupil = self.genpsfmodel(sigma,Zcoeff=Zcoeff)
-            I_model_bead,_ = self.genpsfmodel(sigma,Zcoeff=Zcoeff,addbead=True)
+            I_model, pupil = self.genpsfmodel(sigma,Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
+            I_model_bead, _ = self.genpsfmodel(sigma,Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase, addbead=True)
 
         images, _, centers, _ = self.data.get_image_data()
         original_shape = images.shape[-3:]
@@ -227,17 +207,18 @@ class PSFZernikeBased(PSFInterface):
             global_positions = np.swapaxes(np.vstack((positions[:,0]+z_center,centers[:,-2]-positions[:,-2],centers[:,-1]-positions[:,-1])),1,0)
 
         return [global_positions.astype(np.float32),
-                backgrounds*self.weight[1],
-                intensities*self.weight[0],
+                backgrounds*self.weight["background"],
+                intensities*self.weight["intensity"],
                 I_model_bead,
                 I_model,
                 np.complex64(pupil),
-                Zcoeff,     
-                sigma,   
-                gxy*self.weight[2],
+                Zcoeff_magnitude,
+                Zcoeff_phase,
+                sigma,
+                gxy*self.weight["drift"],
                 np.flip(I_model,axis=-3),
                 variables]
-    
+
     def res2dict(self, res: list) -> dict[str, Any]:
         """Convert optimization results to a dictionary with named fields."""
         res_dict = dict(pos=res[0],

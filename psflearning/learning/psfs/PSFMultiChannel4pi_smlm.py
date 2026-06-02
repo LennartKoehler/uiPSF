@@ -6,14 +6,13 @@ import numpy as np
 from requests import options
 import scipy as sp
 import tensorflow as tf
-from psflearning.learning.psfs.PSFPupilBased4pi_file import PSFPupilBased4pi
+from psflearning.learning.psfs.PSFPupilBased4pi import PSFPupilBased4pi
+from psflearning.learning.psfs.PSFVolumeBased4pi import PSFVolumeBased4pi
+from psflearning.learning.psfs.PSFZernikeBased4pi import PSFZernikeBased4pi
 
-from psflearning.learning.psfs.PSFVolumeBased4pi_file import PSFVolumeBased4pi
-from psflearning.learning.psfs.PSFZernikeBased4pi_file import PSFZernikeBased4pi
-
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
-from ..fitters.Fitter_file import Fitter
+from .PSFInterface import PSFInterface
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from ..fitters.PSFLearner import PSFLearner
 from ..optimizers import OptimizerABC, L_BFGS_B
 from ..loclib import localizationlib
 
@@ -145,7 +144,7 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
             init_params[i][1][:,0,0] = bg/self.sub_psfs[0].weight[1]
             init_params[i][2][:,0,0] = photon/self.sub_psfs[0].weight[0]
 
-        fitter_ref_channel = Fitter(self.data.get_channel(0), self.sub_psfs[0],self.init_optimizer, self.sub_psfs[0].default_loss_func,loss_weight=self.loss_weight) # TODO: redesign multiData        
+        fitter_ref_channel = PSFLearner(self.data.get_channel(0), self.sub_psfs[0],self.init_optimizer, self.sub_psfs[0].default_loss_func,loss_weight=self.loss_weight)        
         
         res_ref, toc = fitter_ref_channel.learn_psf(variables=init_params[0],start_time=start_time)
 
@@ -155,7 +154,7 @@ class PSFMultiChannel4pi_smlm(PSFInterface):
         init_params1 = [res_ref[-1]]
         init_trafos = []
         for i in range(1,num_channels):
-            fitter_current_channel = Fitter(self.data.get_channel(i), self.sub_psfs[i], self.init_optimizer,self.sub_psfs[i].default_loss_func,loss_weight=self.loss_weight)
+            fitter_current_channel = PSFLearner(self.data.get_channel(i), self.sub_psfs[i], self.init_optimizer,self.sub_psfs[i].default_loss_func,loss_weight=self.loss_weight)
             res_cur, toc = fitter_current_channel.learn_psf(variables=init_params[i],start_time=toc)
             current_pos = res_cur[0]
             # calculate transformation

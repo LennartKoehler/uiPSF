@@ -6,14 +6,14 @@ import numpy as np
 import scipy as sp
 import tensorflow as tf
 from scipy.ndimage.filters import gaussian_filter
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PSFZernikeBase import PSFZernikeBase
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_real_zernike_smlm
 from .. import utilities as im
 from .. import imagetools as nip
 from ..loclib import localizationlib
 
-class PSFZernikeBased_vector_smlm(PSFInterface):
+class PSFZernikeBased_vector_smlm(PSFZernikeBase):
     """
     PSF class that uses a 3D volume to describe the PSF.
     Should only be used with single-channel data.
@@ -152,58 +152,54 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         pos, backgrounds, intensities, Zcoeff, sigma, stagepos = variables
         c1 = self.spherical_terms
         n_max = self.n_max_mag
-        Nk = np.min(((n_max+1)*(n_max+2)//2,self.Zk.shape[0]))
-        mask = c1<Nk
+        Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.Zk.shape[0]))
+        mask = c1 < Nk
         c1 = c1[mask]
         if self.options.model.symmetric_mag:
-            pupil_mag = tf.reduce_sum(self.Zk[c1]*tf.gather(Zcoeff[0],indices=c1)*self.weight[4],axis=0)
+            pupil_mag = tf.reduce_sum(self.Zk[c1] * tf.gather(Zcoeff[0], indices=c1) * self.weight[4], axis=0)
         else:
             if self.options.model.zernike_nl:
                 c2 = self.noll_index
-                if np.min(c2)>0:
-                    c2 = np.concatenate(([0],c2))
-                mask = c2<Nk
+                if np.min(c2) > 0:
+                    c2 = np.concatenate(([0], c2))
+                mask = c2 < Nk
                 c2 = c2[mask]
-                pupil_mag = tf.reduce_sum(self.Zk[c2]*tf.gather(Zcoeff[0],indices=c2)*self.weight[4],axis=0)
+                pupil_mag = tf.reduce_sum(self.Zk[c2] * tf.gather(Zcoeff[0], indices=c2) * self.weight[4], axis=0)
             else:
-                pupil_mag = tf.reduce_sum(self.Zk[0:Nk]*Zcoeff[0][0:Nk]*self.weight[4],axis=0)
-        pupil_mag = tf.math.maximum(pupil_mag,0.0)
-        
+                pupil_mag = tf.reduce_sum(self.Zk[0:Nk] * Zcoeff[0][0:Nk] * self.weight[4], axis=0)
+        pupil_mag = tf.math.maximum(pupil_mag, 0.0)
 
         if self.options.model.zernike_nl:
-            pupil_phase = tf.reduce_sum(self.Zk[self.noll_index]*tf.gather(Zcoeff[1],indices=self.noll_index)*self.weight[3],axis=0)
+            pupil_phase = tf.reduce_sum(
+                self.Zk[self.noll_index] * tf.gather(Zcoeff[1], indices=self.noll_index) * self.weight[3], axis=0
+            )
         else:
-            pupil_phase = tf.reduce_sum(self.Zk[3:]*Zcoeff[1][3:]*self.weight[3],axis=0)
-        
-        pupil = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*self.apoid                
-        pos = tf.complex(tf.reshape(pos*self.weight[2],pos.shape+(1,1)),0.0)
+            pupil_phase = tf.reduce_sum(self.Zk[3:] * Zcoeff[1][3:] * self.weight[3], axis=0)
+
+        pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
+        pos = tf.complex(tf.reshape(pos * self.weight[2], pos.shape + (1, 1)), 0.0)
 
         if self.options.insitu.var_stagepos:
-            stagepos = tf.complex(stagepos*self.weight[5],0.0)
+            stagepos = tf.complex(stagepos * self.weight[5], 0.0)
         else:
-            stagepos = tf.complex(self.init_stagepos*self.weight[5],0.0)
+            stagepos = tf.complex(self.init_stagepos * self.weight[5], 0.0)
 
-        phiz = 1j*2*np.pi*(self.kz_med*pos[:,0]*self.zweight[self.ind[0]:self.ind[1]]-self.kz*stagepos)
-        phixy = 1j*2*np.pi*self.ky*pos[:,1]+1j*2*np.pi*self.kx*pos[:,2]
-        I_res = 0.0
-        for h in self.dipole_field:
-            PupilFunction = pupil*tf.exp(phiz+phixy)*h
-            psfA = im.cztfunc1(PupilFunction,self.paramxy)        
-            I_res += psfA*tf.math.conj(psfA)*self.normf
+        phiz = 1j * 2 * np.pi * (self.kz_med * pos[:, 0] * self.zweight[self.ind[0]:self.ind[1]] - self.kz * stagepos)
+        phixy = 1j * 2 * np.pi * self.ky * pos[:, 1] + 1j * 2 * np.pi * self.kx * pos[:, 2]
+        phase_z = tf.exp(phiz)
+        phase_xy = tf.exp(phixy)
+
+        I_res = self.propagate_pupil(pupil, phase_z, phase_xy)
 
         bin = self.options.model.bin
         if not self.options.model.var_blur:
             sigma = self.init_sigma
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
-        I_blur = im.ifft2d(im.fft2d(I_res)*filter2)
-        I_blur = tf.expand_dims(tf.math.real(I_blur),axis=-1)
-        kernel = np.ones((bin,bin,1,1),dtype=np.float32)
-        I_blur_bin = tf.nn.convolution(I_blur,kernel,strides=(1,bin,bin,1),padding='SAME',data_format='NHWC')
+        I_blur = self.apply_blur_2d(I_res, sigma)
+        I_blur_bin = self.bin_image_2d(I_blur, bin)
 
-        psf_fit = I_blur_bin[...,0]*intensities*self.weight[0]
-        
-        forward_images = psf_fit + backgrounds*self.weight[1]
+        psf_fit = I_blur_bin[..., 0] * intensities * self.weight[0]
+
+        forward_images = psf_fit + backgrounds * self.weight[1]
 
         return forward_images
 
@@ -265,32 +261,30 @@ class PSFZernikeBased_vector_smlm(PSFInterface):
         """
         Generate the PSF model from Zernike coefficients and optional stage position.
         """
-
-        pupil_mag = tf.reduce_sum(self.Zk*Zcoeff[0],axis=0)
-        pupil_mag = tf.math.maximum(pupil_mag,0)
-        pupil_phase = tf.reduce_sum(self.Zk*Zcoeff[1],axis=0)
-        pupil = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*self.apoid
+        pupil_mag = tf.reduce_sum(self.Zk * Zcoeff[0], axis=0)
+        pupil_mag = tf.math.maximum(pupil_mag, 0)
+        pupil_phase = tf.reduce_sum(self.Zk * Zcoeff[1], axis=0)
+        pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
         if stagepos is None:
             stagepos = self.stagepos
         zrange = self.Zrange
-        phiz = 1j*2*np.pi*(self.kz_med*zrange-self.kz*stagepos)  
-        phixy = 1j*2*np.pi*self.ky*0.0+1j*2*np.pi*self.kx*0.0
-        I_res = 0.0
-        for h in self.dipole_field:
-            PupilFunction = pupil*tf.exp(phiz+phixy)*h
-            psfA = im.cztfunc1(PupilFunction,self.paramxy)       
-            I_res += psfA*tf.math.conj(psfA)*self.normf
-        
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
-        I_blur = im.ifft3d(im.fft3d(I_res)*filter2)
-        I_blur = tf.expand_dims(tf.math.real(I_blur),axis=-1)
+        phiz = 1j * 2 * np.pi * (self.kz_med * zrange - self.kz * stagepos)
+        phixy = 1j * 2 * np.pi * self.ky * 0.0 + 1j * 2 * np.pi * self.kx * 0.0
+        phase_z = tf.exp(phiz)
+        phase_xy = tf.exp(phixy)
+
+        I_res = self.propagate_pupil(pupil, phase_z, phase_xy)
+
+        filter2 = tf.exp(-2 * sigma[1] * sigma[1] * self.kspace_x - 2 * sigma[0] * sigma[0] * self.kspace_y)
+        filter2 = tf.complex(filter2 / tf.reduce_max(filter2), 0.0)
+        I_blur = im.ifft3d(im.fft3d(I_res) * filter2)
+        I_blur = tf.expand_dims(tf.math.real(I_blur), axis=-1)
         bin = self.options.model.bin
-        kernel = np.ones((bin,bin,1,1),dtype=np.float32)
-        I_blur_bin = tf.nn.convolution(I_blur,kernel,strides=(1,bin,bin,1),padding='SAME',data_format='NHWC')
-        I_model = np.real(I_blur_bin[...,0])
-        
+        kernel = np.ones((bin, bin, 1, 1), dtype=np.float32)
+        I_blur_bin = tf.nn.convolution(I_blur, kernel, strides=(1, bin, bin, 1), padding='SAME', data_format='NHWC')
+        I_model = np.real(I_blur_bin[..., 0])
+
         return I_model, pupil
 
     def partitiondata(self, zf: np.ndarray, LL: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

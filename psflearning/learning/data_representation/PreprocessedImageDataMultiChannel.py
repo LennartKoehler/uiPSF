@@ -5,7 +5,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from typing import Any, Type
 
-from .PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PreprocessedImageDataInterface import PreprocessedImageDataInterface
 
 class PreprocessedImageDataMultiChannel(PreprocessedImageDataInterface):
     """

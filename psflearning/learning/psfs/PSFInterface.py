@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 import scipy.special as spf
 
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .. import utilities as im
 from .. import imagetools as nip
 
@@ -65,15 +65,15 @@ class PSFInterface():
         if Nz is None:
             Nz = self.bead_kernel.shape[0]
         bin = self.options.model.bin
-        Lx = self.data.rois.shape[-1]*bin        
+        Lx = self.data.rois.shape[-1]*bin
         Ly = self.data.rois.shape[-2]*bin
         Lz = self.data.rois.shape[-3]
         xsz =self.options.model.pupilsize
-     
+
         xrange = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx)
         [xx,yy] = np.meshgrid(xrange,xrange)
         pkx = xx/Lx
-        pky = yy/Lx     
+        pky = yy/Lx
         self.kspace = np.float32(pkx*pkx+pky*pky)
         self.kspace_x = np.float32(pkx*pkx)
         self.kspace_y = np.float32(pky*pky)
@@ -135,13 +135,13 @@ class PSFInterface():
         pupil = self.aperture*apoid
         pupil = tf.cast(pupil,tf.complex64)
         if fieldtype=='scalar':
-            psfA = im.cztfunc1(pupil,self.paramxy)   
+            psfA = im.cztfunc1(pupil,self.paramxy)
             self.normf = np.complex64(1/np.sum(psfA*np.conj(psfA)))
         else:
             I_res = 0.0
             for h in self.dipole_field:
                 PupilFunction = pupil*h
-                psfA = im.cztfunc1(PupilFunction,self.paramxy)       
+                psfA = im.cztfunc1(PupilFunction,self.paramxy)
                 I_res += psfA*tf.math.conj(psfA)
             self.normf = np.complex64(1/np.sum(I_res))
         self.Zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
@@ -155,7 +155,7 @@ class PSFInterface():
         self.nmed = nmed
         self.Zk = np.float32(Zk)
 
-        Lx = self.data.rois.shape[-1]      
+        Lx = self.data.rois.shape[-1]
         Ly = self.data.rois.shape[-2]
         Lz = self.data.rois.shape[-3]
 
@@ -169,10 +169,10 @@ class PSFInterface():
         """
         Calculate the normalization factor from a pupil function.
         """
-        psfA = im.cztfunc1(pupil,self.paramxy)   
+        psfA = im.cztfunc1(pupil,self.paramxy)
         normf = tf.math.real(tf.reduce_sum(psfA*tf.math.conj(psfA)))
         return normf
-        
+
     def gen_bead_kernel(self, isVolume: bool = False) -> None:
         """
         Generate a bead kernel for convolution with the PSF model.
@@ -185,7 +185,7 @@ class PSFInterface():
         else:
             Nz = self.data.rois.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
             bin = self.options.model.bin
-        
+
         Lx = self.data.rois.shape[-1]*bin
         pixelsize_x = self.data.pixelsize_x/bin
         pixelsize_y = self.data.pixelsize_y/bin
@@ -210,7 +210,7 @@ class PSFInterface():
             kernel = np.ones((Nz,Lx,Lx),dtype=np.float32)
         self.bead_kernel = tf.complex(kernel,0.0)
 
-        return 
+        return
 
 
     def applyPhaseRamp(self, img: tf.Tensor, shiftvec: tf.Tensor) -> tf.Tensor:
@@ -224,8 +224,8 @@ class PSFInterface():
         myshape = im.shapevec(res)
         ShiftDims = shiftvec.shape[-1]
         for d in range(1, ShiftDims+1):
-            myshifts = shiftvec[..., -d] 
-            for ed in range(len(myshape) - len(myshifts.shape)): 
+            myshifts = shiftvec[..., -d]
+            for ed in range(len(myshape) - len(myshifts.shape)):
                 myshifts = tf.expand_dims(myshifts,-1)
             res = res * tf.exp(tf.complex(im.totensor(0.0), 2.0 * np.pi * myshifts * nip.ramp1D(myshape[-d], ramp_dim = -d, freq='ftfreq')))
         return res
@@ -241,18 +241,20 @@ class PSFInterface():
 
         return tf.exp(shiftphase)
 
-    def applyDrfit(self, psfin: tf.Tensor, gxy: tf.Tensor) -> tf.Tensor:
+    def applyDrift(self, psfin: tf.Tensor, gxy: tf.Tensor) -> tf.Tensor:
         """
-        Apply drift correction to a PSF using skew or linear drift.
+        Apply drift or shift correction to a PSF using skew or linear drift.
         """
         otf2d = im.fft2d(tf.complex(psfin,0.0))
         if self.data.skew_const:
+            # drift
             sk = np.array([self.data.skew_const],dtype=np.float32)+np.zeros(gxy.shape,dtype=np.float32)
             sk = np.reshape(sk,sk.shape+(1,1,1))
-            dxy = tf.complex(-sk*self.zv+tf.round(sk*self.zv),0.0) 
+            dxy = tf.complex(-sk*self.zv+tf.round(sk*self.zv),0.0)
             shiftphase = self.phaseRamp(dxy)
 
         else:
+            # shift
             gxy = tf.complex(tf.reshape(gxy,gxy.shape+(1,1,1)),0.0)*self.zv
             shiftphase = self.phaseRamp(gxy)
         psf_shift = tf.math.real(im.ifft2d(otf2d*shiftphase))
@@ -276,7 +278,7 @@ class PSFInterface():
         # it is true for PSF at any 3 phases, however, if the 3 phases are exactly at [-2pi/3, 0, 2pi/3], then G can be used to represent the complex IAB model, where
         I = np.real(G[:,1])/3
         A = G[:,0]/3
-        B = G[:,2]/3 # B = np.conj(A) 
+        B = G[:,2]/3 # B = np.conj(A)
 
         a = np.squeeze(np.sum(np.real(A[0]),axis = (-1,-2)))
         b = np.squeeze(np.sum(np.imag(A[0]),axis = (-1,-2)))

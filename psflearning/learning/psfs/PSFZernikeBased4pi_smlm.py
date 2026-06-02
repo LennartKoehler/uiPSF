@@ -7,15 +7,15 @@ import tensorflow as tf
 
 
 from scipy.ndimage.filters import gaussian_filter
-from .PSFInterface_file import PSFInterface
-from ..data_representation.PreprocessedImageDataInterface_file import PreprocessedImageDataInterface
+from .PSFZernikeBase import PSFZernikeBase
+from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_zernike_4pi_smlm
 from .. import utilities as im
 from .. import imagetools as nip
 from ..loclib import localizationlib
 
 
-class PSFZernikeBased4pi_smlm(PSFInterface):
+class PSFZernikeBased4pi_smlm(PSFZernikeBase):
     def __init__(self, max_iter: int | None = None, options: Any = None) -> None:
         
         self.parameters = None
@@ -136,71 +136,58 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
         """
         Calculate forward images from the current guess of the variables.
         """
-                
-        pos, bg, intensity_abs,intensity_phase, stagepos, sampleheight,Zcoeffmag, Zcoeffphase, sigma,alpha = variables
-        intensity_phase = tf.complex(tf.math.cos(intensity_phase*self.weight[2]),tf.math.sin(intensity_phase*self.weight[2]))
-        phase0 = tf.complex(tf.math.cos(self.dphase),tf.math.sin(self.dphase))
-        pos = tf.complex(tf.reshape(pos*self.weight[2],pos.shape+(1,1)),0.0)
+        pos, bg, intensity_abs, intensity_phase, stagepos, sampleheight, Zcoeffmag, Zcoeffphase, sigma, alpha = variables
+        intensity_phase = tf.complex(
+            tf.math.cos(intensity_phase * self.weight[2]), tf.math.sin(intensity_phase * self.weight[2])
+        )
+        phase0 = tf.complex(tf.math.cos(self.dphase), tf.math.sin(self.dphase))
+        pos = tf.complex(tf.reshape(pos * self.weight[2], pos.shape + (1, 1)), 0.0)
         c1 = self.spherical_terms
         n_max = self.n_max_mag
-        Nk = np.min(((n_max+1)*(n_max+2)//2,self.Zk.shape[0]))
-        mask = c1<Nk
+        Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.Zk.shape[0]))
+        mask = c1 < Nk
         c1 = c1[mask]
         if self.options.model.symmetric_mag:
-            pupil_mag1 = tf.reduce_sum(self.Zk[c1]*tf.gather(Zcoeffmag[0],indices=c1)*self.weight[4],axis=0)
-            pupil_mag2 = tf.reduce_sum(self.Zk[c1]*tf.gather(Zcoeffmag[1],indices=c1)*self.weight[4],axis=0)
+            pupil_mag1 = tf.reduce_sum(self.Zk[c1] * tf.gather(Zcoeffmag[0], indices=c1) * self.weight[4], axis=0)
+            pupil_mag2 = tf.reduce_sum(self.Zk[c1] * tf.gather(Zcoeffmag[1], indices=c1) * self.weight[4], axis=0)
 
         else:
-            pupil_mag1 = tf.reduce_sum(self.Zk[0:Nk]*Zcoeffmag[0][0:Nk]*self.weight[4],axis=0)
-            pupil_mag2 = tf.reduce_sum(self.Zk[0:Nk]*Zcoeffmag[1][0:Nk]*self.weight[4],axis=0)
-        pupil_mag1 = tf.math.maximum(pupil_mag1,0)
-        pupil_mag2 = tf.math.maximum(pupil_mag2,0)
+            pupil_mag1 = tf.reduce_sum(self.Zk[0:Nk] * Zcoeffmag[0][0:Nk] * self.weight[4], axis=0)
+            pupil_mag2 = tf.reduce_sum(self.Zk[0:Nk] * Zcoeffmag[1][0:Nk] * self.weight[4], axis=0)
+        pupil_mag1 = tf.math.maximum(pupil_mag1, 0)
+        pupil_mag2 = tf.math.maximum(pupil_mag2, 0)
 
-        pupil_phase = tf.reduce_sum(self.Zk[1:]*Zcoeffphase[0][1:]*self.weight[3],axis=0)
-        pupil1 = tf.complex(pupil_mag1*tf.math.cos(pupil_phase),pupil_mag1*tf.math.sin(pupil_phase))*self.aperture*(self.apoid)
+        pupil_phase = tf.reduce_sum(self.Zk[1:] * Zcoeffphase[0][1:] * self.weight[3], axis=0)
+        pupil1 = self.magnitude_phase_to_pupil(pupil_mag1, pupil_phase)
 
-                
-        pupil_phase = tf.reduce_sum(self.Zk*Zcoeffphase[1]*self.weight[3],axis=0)
-        pupil2 = tf.complex(pupil_mag2*tf.math.cos(pupil_phase),pupil_mag2*tf.math.sin(pupil_phase))*self.aperture*(self.apoid)   
+        pupil_phase = tf.reduce_sum(self.Zk * Zcoeffphase[1] * self.weight[3], axis=0)
+        pupil2 = self.magnitude_phase_to_pupil(pupil_mag2, pupil_phase)
 
-        # consider index mismatch
         if self.options.insitu.var_stagepos:
-            stagepos = tf.complex(stagepos*self.weight[6],0.0)
+            stagepos = tf.complex(stagepos * self.weight[6], 0.0)
         else:
-            stagepos = tf.complex(self.init_stagepos*self.weight[6],0.0)
+            stagepos = tf.complex(self.init_stagepos * self.weight[6], 0.0)
 
         if self.options.fpi.var_sampleheight:
-            sampleheight = tf.complex(sampleheight*self.weight[6],0.0)
+            sampleheight = tf.complex(sampleheight * self.weight[6], 0.0)
         else:
-            sampleheight = tf.complex(self.init_sampleheight*self.weight[6],0.0)
+            sampleheight = tf.complex(self.init_sampleheight * self.weight[6], 0.0)
 
-        phid = 1j*2*np.pi*(self.kz_med-self.kz*self.nimm/self.nmed)*sampleheight
-        phiz = 1j*2*np.pi*((self.kz_med-self.k)*pos[:,0]-self.kz*stagepos)
-        phixy = 1j*2*np.pi*self.ky*pos[:,1]+1j*2*np.pi*self.kx*pos[:,2]
+        phid = 1j * 2 * np.pi * (self.kz_med - self.kz * self.nimm / self.nmed) * sampleheight
+        phiz = 1j * 2 * np.pi * ((self.kz_med - self.k) * pos[:, 0] - self.kz * stagepos)
+        phixy = 1j * 2 * np.pi * self.ky * pos[:, 1] + 1j * 2 * np.pi * self.kx * pos[:, 2]
 
-        PupilFunction = (pupil1*tf.exp(phid-phiz)*intensity_phase + pupil2*tf.exp(phiz)*phase0)*tf.exp(phixy)
-        I_m = im.cztfunc1(PupilFunction,self.paramxy)   
-        I_m = I_m*tf.math.conj(I_m)*self.normf/2.0
+        phase_arm1 = tf.exp(phid - phiz) * intensity_phase
+        phase_arm2 = tf.exp(phiz) * phase0
+        phase_xy = tf.exp(phixy)
 
-        PupilFunction1 = pupil1*tf.exp(phid-phiz)*tf.exp(phixy)
-        I1 = im.cztfunc1(PupilFunction1,self.paramxy)   
-        I1 = I1*tf.math.conj(I1)*self.normf/2.0
+        I_res = self.compute_4pi_intensity(
+            pupil1, pupil2, phase_arm1, phase_arm2, alpha * self.weight[5], 0.0, phase_xy=phase_xy
+        )
 
-        PupilFunction2 = pupil2*tf.exp(phiz)*tf.exp(phixy)
-        I2 = im.cztfunc1(PupilFunction2,self.paramxy)   
-        I2 = I2*tf.math.conj(I2)*self.normf/2.0
+        I_blur = self.apply_blur_3d(I_res, sigma, use_bead_kernel=False)
 
-        I_w = I1+I2
-        alpha = tf.complex(alpha*self.weight[5],0.0)
-        I_res = alpha*I_m + (1-alpha)*I_w
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
-        I_blur = im.ifft3d(im.fft3d(I_res)*filter2)
-        
-        forward_images = tf.math.real(I_blur)*intensity_abs*self.weight[0] + bg*self.weight[1]
-                
-
+        forward_images = tf.squeeze(tf.math.real(I_blur)) * intensity_abs * self.weight[0] + bg * self.weight[1]
 
         return forward_images
 
@@ -240,43 +227,33 @@ class PSFZernikeBased4pi_smlm(PSFInterface):
         Generate a 4pi PSF model from Zernike magnitude and phase coefficients,
         returning the PSF intensity, IAB model, and pupil functions.
         """
-        phase0 = np.reshape(np.array([-2/3,0,2/3])*np.pi+self.dphase,(3,1,1,1)).astype(np.float32)
-        phase0 = tf.complex(tf.math.cos(phase0),tf.math.sin(phase0))
+        phase0 = np.reshape(np.array([-2/3, 0, 2/3]) * np.pi + self.dphase, (3, 1, 1, 1)).astype(np.float32)
+        phase0 = tf.complex(tf.math.cos(phase0), tf.math.sin(phase0))
 
-        pupil_mag = tf.abs(tf.reduce_sum(self.Zk*Zcoeffmag[0],axis=0))
-        pupil_phase = tf.reduce_sum(self.Zk[1:]*Zcoeffphase[0][1:],axis=0)
-        pupil1 = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*(self.apoid)
+        pupil_mag = tf.abs(tf.reduce_sum(self.Zk * Zcoeffmag[0], axis=0))
+        pupil_phase = tf.reduce_sum(self.Zk[1:] * Zcoeffphase[0][1:], axis=0)
+        pupil1 = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
-        pupil_mag = tf.abs(tf.reduce_sum(self.Zk*Zcoeffmag[1],axis=0))
-        pupil_phase = tf.reduce_sum(self.Zk*Zcoeffphase[1],axis=0)
-        pupil2 = tf.complex(pupil_mag*tf.math.cos(pupil_phase),pupil_mag*tf.math.sin(pupil_phase))*self.aperture*(self.apoid)  
+        pupil_mag = tf.abs(tf.reduce_sum(self.Zk * Zcoeffmag[1], axis=0))
+        pupil_phase = tf.reduce_sum(self.Zk * Zcoeffphase[1], axis=0)
+        pupil2 = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
         if stagepos is None:
             stagepos = self.stagepos
-        
+
         if sampleheight is None:
             sampleheight = self.sampleheight
 
-        phid = 1j*2*np.pi*(self.kz_med-self.kz*self.nimm/self.nmed)*sampleheight
-        phiz = 1j*2*np.pi*(self.kz_med*self.Zrange-self.kz*stagepos)
+        phid = 1j * 2 * np.pi * (self.kz_med - self.kz * self.nimm / self.nmed) * sampleheight
+        phiz = 1j * 2 * np.pi * (self.kz_med * self.Zrange - self.kz * stagepos)
 
-        PupilFunction = (pupil1*tf.exp(phid-phiz) + pupil2*tf.exp(phiz)*phase0)
-        I_m = im.cztfunc1(PupilFunction,self.paramxy)   
-        I_m = I_m*tf.math.conj(I_m)*self.normf/2.0
+        phase_arm1 = tf.exp(phid - phiz)
+        phase_arm2 = tf.exp(phiz) * phase0
 
-        PupilFunction1 = pupil1*tf.exp(phid-phiz)
-        I1 = im.cztfunc1(PupilFunction1,self.paramxy)   
-        I1 = I1*tf.math.conj(I1)*self.normf/2.0
+        I_res = self.compute_4pi_intensity(pupil1, pupil2, phase_arm1, phase_arm2, alpha, 0.0)
 
-        PupilFunction2 = pupil2*tf.exp(phiz)
-        I2 = im.cztfunc1(PupilFunction2,self.paramxy)  
-        I2 = I2*tf.math.conj(I2)*self.normf/2.0
-
-        I_w = I1+I2
-        
-        I_res = alpha*I_m + (1-alpha)*I_w
-        filter2 = tf.exp(-2*sigma[1]*sigma[1]*self.kspace_x-2*sigma[0]*sigma[0]*self.kspace_y)
-        filter2 = tf.complex(filter2/tf.reduce_max(filter2),0.0)
+        filter2 = tf.exp(-2 * sigma[1] * sigma[1] * self.kspace_x - 2 * sigma[0] * sigma[0] * self.kspace_y)
+        filter2 = tf.complex(filter2 / tf.reduce_max(filter2), 0.0)
         
         Zphase = self.Zphase/self.zT  
         zphase = tf.complex(tf.math.cos(Zphase),tf.math.sin(Zphase))
