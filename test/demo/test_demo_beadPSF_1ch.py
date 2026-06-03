@@ -1,11 +1,17 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import sys
 sys.path.append("../..")
 from psflearning.psflearninglib import PSFLearningLib
 from psflearning import io
 import tensorflow as tf
+from psflearning.learning import PSFLearner, Localizer, L_BFGS_B
+from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult
+from psflearning.learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 
-# main_data_dir = io.param.load('test/demo/datapath.yaml').main_data_dir
 main_data_dir = 'example_data_for_uiPSF'
+output_dir = 'test_output'
 
 try:
     gpus = tf.config.list_physical_devices('GPU')
@@ -40,7 +46,7 @@ dataobj = L.prep_data(param, images)
 
 # -- RUN --
 for k in range(0, 1):
-    psfobj, fitter, learning_result, loc_result = L.learn_psf(param, dataobj, psf_info, time=0)
+        psfobj, fitter, localizer, learning_result, loc_result, toc = L.learn_with_relearn(param, dataobj, psf_info, time=0)
 
 
 # -- SAVE --
@@ -48,41 +54,15 @@ resfile = L.save_result(param, psfobj, dataobj, fitter, learning_result, loc_res
 
 f, p = io.h5.load(resfile)
 
-fig = L.plotter.plot_psf_vs_data(f, p, index=1)
-fig.show()
+# -- PLOT & SAVE --
+print('\nGenerating plots and saving to:', output_dir)
+saved = L.plotter.generate_report(f, p, output_dir, index=1)
+for name, paths in saved.items():
+    print(f'  {name}:')
+    for path in paths:
+        print(f'    {path}')
 
-fig = L.plotter.plot_localization(f, p)
-if isinstance(fig, list):
-    for f_fig in fig:
-        f_fig.show()
-else:
-    fig.show()
-
-try:
-    figs = L.plotter.plot_zernike(f, p)
-    if isinstance(figs, list):
-        for f_fig in figs:
-            f_fig.show()
-    else:
-        figs.show()
-except Exception:
-    try:
-        figs = L.plotter.plot_pupil(f, p)
-        if isinstance(figs, list):
-            for f_fig in figs:
-                f_fig.show()
-        else:
-            figs.show()
-    except Exception:
-        print('no pupil')
-
-fig = L.plotter.plot_learned_params(f, p)
-fig.show()
-
-fig = L.plotter.plot_coordinates(f, p)
-fig.show()
-
-print('f:\n    ', list(f.keys()))
+print('\nf:\n    ', list(f.keys()))
 print(' locres:\n    ', list(f.locres.keys()))
 print(' res:\n    ', list(f.res.keys()))
 print(' rois:\n    ', list(f.rois.keys()))

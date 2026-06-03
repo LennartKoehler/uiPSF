@@ -166,3 +166,11 @@ def cztfunc1(datain: tf.Tensor, param: tuple[np.ndarray, tf.Tensor, np.ndarray])
     dataout = C*cztout[...,-M:,-M:]
 
     return dataout
+
+
+def totensor(x):
+    return tf.convert_to_tensor(x)
+
+
+def shapevec(x):
+    return x.shape

@@ -18,7 +18,39 @@ import os
 import sys
 import tensorflow as tf
 from psflearning import io
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass
+class LocalizationResult:
+    """Structured result returned by the MLE localization routines.
+
+    Attributes
+    ----------
+    parameters : np.ndarray
+        Fitted parameters per emitter (x, y, z, photons, bg, ...).
+    crlb : np.ndarray
+        Cramér-Rao lower bounds (uncertainty estimates) for each parameter.
+    log_likelihood : np.ndarray
+        Log-likelihood values per fit.
+    spline_coefficients : np.ndarray
+        Cubic-spline coefficients used for the fit.
+    mse_z_ratio : np.ndarray
+        Relative MSE in z (used as outlier rejection metric).
+    toc : float
+        End time of the localization step.
+    positions : dict[str, np.ndarray]
+        Localized positions with keys ``'x'``, ``'y'``, ``'z'``
+        (and ``'zast'`` for 4Pi).
+    """
+    parameters: np.ndarray
+    crlb: np.ndarray
+    log_likelihood: np.ndarray
+    spline_coefficients: np.ndarray
+    mse_z_ratio: np.ndarray
+    toc: float
+    positions: dict[str, np.ndarray]
 #%%
 class localizationlib:
     def __init__(self, usecuda: bool = False) -> None:
@@ -128,7 +160,7 @@ class localizationlib:
 
 
 
-    def loc_ast_dual(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+    def loc_ast_dual(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> LocalizationResult:
         """Perform multi-channel astigmatic localization fitting."""
 
         rsz = psf_data.shape[-1]
@@ -157,7 +189,7 @@ class localizationlib:
             pbar.update(1)
             
         toc = pbar.postfix[1]['time']    
-        pbar.close  
+        pbar.close()
         Iall = np.stack(Iall).astype(np.float32)
         data = psf_data.reshape((Nchannel,Nfit,rsz,rsz))
         bxsz = np.min((rsz,20))
@@ -256,10 +288,18 @@ class localizationlib:
 
         loc_dict = dict(x=xf,y=yf,z=zf)
 
-        return P, CRLB, LL, Iall, msezRatio,toc, loc_dict
+        return LocalizationResult(
+            parameters=P,
+            crlb=CRLB,
+            log_likelihood=LL,
+            spline_coefficients=Iall,
+            mse_z_ratio=msezRatio,
+            toc=toc,
+            positions=loc_dict,
+        )
 
 
-    def loc_4pi(self, psf_data: np.ndarray, I_model: np.ndarray, A_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, zT: float, initz: np.ndarray | None = None, initphi: np.ndarray | None = None, plot: bool = False, start_time: float = 0, linkxy: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+    def loc_4pi(self, psf_data: np.ndarray, I_model: np.ndarray, A_model: np.ndarray, pixelsize_z: float, cor: np.ndarray, imgcenter: np.ndarray, T: np.ndarray, zT: float, initz: np.ndarray | None = None, initphi: np.ndarray | None = None, plot: bool = False, start_time: float = 0, linkxy: bool = True) -> LocalizationResult:
         """Perform 4Pi localization fitting with phase information."""
         rsz = psf_data.shape[-1]
         Nbead = cor.shape[1]
@@ -451,10 +491,18 @@ class localizationlib:
     
 
         loc_dict = dict(x=xf,y=yf,z=phif,zast=zf)
-        return P, CRLB, LL, IABall, msezRatio, toc, loc_dict
+        return LocalizationResult(
+            parameters=P,
+            crlb=CRLB,
+            log_likelihood=LL,
+            spline_coefficients=IABall,
+            mse_z_ratio=msezRatio,
+            toc=toc,
+            positions=loc_dict,
+        )
 
 
-    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, dict[str, np.ndarray]]:
+    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> LocalizationResult:
         """Perform single-channel astigmatic localization fitting."""
         rsz = psf_data.shape[-1]
         Nbead = psf_data.shape[0]
@@ -475,7 +523,7 @@ class localizationlib:
         pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t    
         pbar.update(1)
         toc = pbar.postfix[1]['time']    
-        pbar.close
+        pbar.close()
         
         coeff = coeff.astype(np.float32)
         data = psf_data.reshape((Nfit,rsz,rsz))
@@ -563,4 +611,12 @@ class localizationlib:
 
         loc_dict = dict(x=xf,y=yf,z=zf)
 
-        return P, CRLB, LL, coeff, msezRatio, toc, loc_dict
+        return LocalizationResult(
+            parameters=P,
+            crlb=CRLB,
+            log_likelihood=LL,
+            spline_coefficients=coeff,
+            mse_z_ratio=msezRatio,
+            toc=toc,
+            positions=loc_dict,
+        )

@@ -1,4 +1,4 @@
-from .psfs.PSFZernikeBased import PSFZernikeBased
+from .psfs.PSFZernikeBased import PSFZernikeBased, ZernikePSFResult
 
 from .fitters.FitterInterface import FitterInterface
 from .fitters.PSFLearner import PSFLearner
@@ -39,6 +39,8 @@ from .loss_functions import (
     mse_real_All,
     mse_real_4pi_All,
 )
+
+from .loclib import LocalizationResult
 
 from .utilities import psf2cspline_np
 

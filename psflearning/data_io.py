@@ -35,7 +35,7 @@ def load_data(param, frange=None):
 
     loader = get_loader(param)
     if not filelist:
-        filelist = loader.getfilelist()
+        filelist = loader.get_file_list()
     if frange:
         filelist = filelist[frange[0]:frange[1]]
 
@@ -215,3 +215,13 @@ def _crop_fov(images, fov):
 #     return PreprocessedImageDataMultiChannel(
 #         images, PreprocessedImageDataSingleChannel
 #     )
+
+from .learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+
+def _create_dataobj(images, param):
+    channeltype = param.channeltype
+    if channeltype == "single":
+        return PreprocessedImageDataSingleChannel(images)
+    raise NotImplementedError(
+        f"channeltype={channeltype!r} is not yet supported in data_io; use Reader.prep_data instead."
+    )

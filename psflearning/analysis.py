@@ -354,6 +354,7 @@ def _fwhm_multi(p, f):
         fwhmyi = np.diff(yh) * p.pixel_size.y * 1e3
         fwhmzi = np.diff(zh) * p.pixel_size.z * 1e3
         fwhmx.append(fwhmxi)
+        fwhmy.append(fwhmyi)
         fwhmz.append(fwhmzi)
 
     return (

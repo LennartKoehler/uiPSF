@@ -5,5 +5,7 @@
   "reportGeneralTypeIssues": "none",
   "reportArgumentType": "none",
   "reportUnknownMemberType": "none",
-  "reportAssignmentType": "none"
+  "reportAssignmentType": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportOperatorIssue": "none"
 }

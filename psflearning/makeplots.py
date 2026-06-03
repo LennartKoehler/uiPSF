@@ -190,7 +190,7 @@ def showzernike(f,p,index=None):
     Nk = (n_max+1)*(n_max+2)//2
 
     indz = np.array([4,5,6,7,10,21])
-    textstr = [None]*6
+    textstr: list = [''] * 6
     textstr[0] = r'$\mathrm{D \ astigmatism}$'
     textstr[1] = r'$\mathrm{astigmatism}$'
     textstr[2] = r'$\mathrm{V \ coma}$'

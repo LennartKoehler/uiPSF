@@ -14,8 +14,7 @@ from typing import Sequence
 try:
     from typing import TypeGuard
 except ImportError:
-    from typing import Any
-    TypeGuard = Any
+    from typing_extensions import TypeGuard
 
 import numpy as np
 import scipy.ndimage as ndimage
@@ -153,7 +152,7 @@ def localMax(
 
     # Get the maximum value in the labels
     #values = ndimage.measurements.maximum(img, labels=labels, index=np.arange(1, num_labels + 1))
-    return coords
+    return list(coords)
 
 
 def multiROIExtract(
@@ -513,3 +512,24 @@ def dimToPositive(dimpos: int, ndims: int) -> int:
     return dimpos+(dimpos<0)*ndims *ndims 
 
 
+def ramp1D(N, ramp_dim=-1, freq='ftfreq'):
+    """Generate a 1D frequency ramp vector.
+
+    Parameters
+    ----------
+    N : int
+        Length of the ramp.
+    ramp_dim : int
+        Dimension index (unused, kept for API compatibility).
+    freq : str
+        Frequency convention: ``'ftfreq'`` for FFT frequencies
+        (``-0.5..0.5``), ``'normal'`` for ``0..1``.
+
+    Returns
+    -------
+    numpy.ndarray
+        1-D frequency ramp of length *N*.
+    """
+    if freq == 'ftfreq':
+        return np.fft.fftfreq(N)
+    return np.linspace(0, 1, N)

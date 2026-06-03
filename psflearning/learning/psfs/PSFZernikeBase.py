@@ -72,7 +72,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         kz_med):
 
         phiz = -1j * 2 * np.pi * kz * (pos[:, 0] + Zrange + defocus)
-        if pos.shape[1] > 3:
+        if int(pos.shape[1]) > 3:
             phixy = 1j * 2 * np.pi * ky * pos[:, 2] + 1j * 2 * np.pi * kx * pos[:, 3]
             phiz = 1j * 2 * np.pi * (kz_med * pos[:, 1] - kz * (pos[:, 0] + Zrange))
         else:
@@ -104,7 +104,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Complex pupil function.
         """
         c1 = self.spherical_terms
-        n_max = self.n_max_mag
+        n_max = getattr(self, 'n_max_mag', 15)
         Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.Zk.shape[0]))
         mask = c1 < Nk
         c1 = c1[mask]
@@ -144,7 +144,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Complex PSF field (after CZT propagation).
         """
         if self.psftype == "vector":
-            I_res = 0.0
+            I_res = tf.constant(0.0)
             for h in self.dipole_field:
                 PupilFunction = pupil * phase_z * h
                 if phase_xy is not None:

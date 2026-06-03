@@ -4,6 +4,7 @@ RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
 RUN apt-get install -y python3 python3-pip python3-tk
 
+ENV MPLBACKEND=Agg
 
 WORKDIR /app
 

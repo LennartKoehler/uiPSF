@@ -55,10 +55,18 @@ from .psf_registry import get_psf_info
 from .fitting import (
     initialize_psf,
     learn_psf,
+    learn_with_relearn,
+    localize,
+    relearn,
     localize_FD,
     iterlearn_psf as _iterlearn_psf,
 )
 from .analysis import genpsf, calstrehlratio, calfwhm
+
+from .learning import PSFLearner, Localizer
+from .learning.psfs.PSFZernikeBased import ZernikePSFResult
+from .learning.psfs.PSFInterface import PSFInterface
+from .learning.loclib import LocalizationResult
 
 
 class PSFLearningLib:
@@ -129,32 +137,63 @@ class PSFLearningLib:
     @staticmethod
     def learn_psf(
         param: DictConfig, dataobj, psf_info: dict, time: Optional[float] = None
-    ) -> tuple:
+    ) -> Tuple[PSFInterface, PSFLearner, ZernikePSFResult, Optional[float]]:
         """Run PSF fitting.
 
         Returns
         -------
         tuple
-            ``(psfobj, fitter, learning_result)``
+            ``(psfobj, learner, learning_result, toc)``
 
         See :func:`fitting.learn_psf`.
         """
         return learn_psf(param, dataobj, psf_info, time=time)
 
     @staticmethod
-    def localize_psf(
+    def learn_with_relearn(
         param: DictConfig, dataobj, psf_info: dict, time: Optional[float] = None
-    ) -> tuple:
-        """Run bead localization.
+    ) -> Tuple[PSFInterface, PSFLearner, Localizer, ZernikePSFResult, LocalizationResult, Optional[float]]:
+        """Learn PSF, localize, remove outliers and re-learn.
 
         Returns
         -------
         tuple
-            ``(loc_result)``
+            ``(psfobj, learner, localizer, learning_result, loc_result)``
 
-        See :func:`fitting.learn_psf`.
+        See :func:`fitting.learn_with_relearn`.
         """
-        return learn_psf(param, dataobj, psf_info, time=time)
+        return learn_with_relearn(param, dataobj, psf_info, time=time)
+
+    @staticmethod
+    def localize_psf(
+        learner, res, param: DictConfig, toc: Optional[float] = None
+    ) -> tuple:
+        """Run localization using a learned PSF.
+
+        Returns
+        -------
+        tuple
+            ``(localizer, loc_result, toc)``
+
+        See :func:`fitting.localize`.
+        """
+        return localize(learner, res, param, toc=toc)
+
+    @staticmethod
+    def relearn_psf(
+        learner, res, param: DictConfig, toc: Optional[float] = None,
+        threshold: Optional[list] = None,
+    ) -> tuple:
+        """Re-learn PSF after rejecting outliers, then re-localize.
+
+        Returns
+        -------
+        tuple
+            ``(localizer, res, loc_result, toc)``
+
+        See :func:`fitting.relearn`.
+        """
+        return relearn(learner, res, param, toc=toc, threshold=threshold)
 
     @staticmethod
     def localize_fd(

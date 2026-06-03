@@ -1,14 +1,132 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Optional, Union
 
 import numpy as np
 import tensorflow as tf
 from scipy.ndimage import gaussian_filter
 
 from .PSFZernikeBase import PSFZernikeBase
+from .PSFInterface import LearnableParameter, LearnablePSFParameters, ParameterScope
 from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_real_zernike
+
+
+@dataclass
+class ZernikePSFResult:
+    """Structured result returned by :meth:`PSFZernikeBased.postprocess`.
+
+    Replaces the former plain-list return value so that consumers can
+    access fields by name instead of magic indices.
+    """
+    positions: np.ndarray
+    backgrounds: np.ndarray
+    intensities: np.ndarray
+    model_bead: np.ndarray
+    model: np.ndarray
+    pupil: np.ndarray
+    zernike_magnitude: np.ndarray
+    zernike_phase: np.ndarray
+    sigma: np.ndarray
+    drift_xy: np.ndarray
+    model_reversed: np.ndarray
+    _variables: Optional[ZernikePSFVariables] = field(default=None, repr=False)
+
+    def filter_by_mask(self, mask: np.ndarray) -> ZernikePSFVariables:
+        assert self._variables is not None
+        return self._variables.filter_by_mask(mask)
+
+@dataclass
+class ZernikePSFVariables(LearnablePSFParameters):
+    """
+    Variables for Zernike-based PSF models (scalar or vector).
+
+    Attributes:
+        positions: Emitter positions in ROI coordinates [n_beads, 2 or 3 or 4].
+            Format: [z, y, x] for standard, or [z, y, x, ...] for IMM.
+        backgrounds: Background level per emitter [n_beads, 1, 1, 1].
+        intensities: Emitter intensity per bead [n_beads, ...].
+            May vary per z-slice if var_photon is enabled.
+        zernike_magnitude: Zernike polynomial coefficients for pupil magnitude
+            [n_zernike, 1, 1]. Shared across all emitters.
+        zernike_phase: Zernike polynomial coefficients for pupil phase
+            [n_zernike, 1, 1]. Shared across all emitters.
+        sigma: Gaussian blur parameters [2] = [sigma_y, sigma_x].
+            Shared across all emitters.
+        drift_xy: Lateral drift between z-slices [n_beads, 2].
+    """
+
+    def __init__(
+        self,
+        positions: np.ndarray,
+        backgrounds: np.ndarray,
+        intensities: np.ndarray,
+        zernike_magnitude: np.ndarray,
+        zernike_phase: np.ndarray,
+        sigma: np.ndarray,
+        drift_xy: np.ndarray,
+    ):
+        self.positions: LearnableParameter = LearnableParameter(ParameterScope.NFIT, positions, 0)
+        self.backgrounds: LearnableParameter = LearnableParameter(ParameterScope.NFIT, backgrounds, 0)
+        self.intensities: LearnableParameter = LearnableParameter(ParameterScope.NFIT, intensities, 0)
+        self.zernike_magnitude: LearnableParameter = LearnableParameter(ParameterScope.SHARED, zernike_magnitude, 0)
+        self.zernike_phase: LearnableParameter = LearnableParameter(ParameterScope.SHARED, zernike_phase, 0)
+        self.sigma: LearnableParameter = LearnableParameter(ParameterScope.SHARED, sigma, 0)
+        self.drift_xy: LearnableParameter = LearnableParameter(ParameterScope.NFIT, drift_xy, 0)
+
+
+    _ATTR_ORDER = ('positions', 'backgrounds', 'intensities',
+                   'zernike_magnitude', 'zernike_phase', 'sigma', 'drift_xy')
+
+    _NFIT_ATTRS = ('positions', 'backgrounds', 'intensities', 'drift_xy')
+
+    @property
+    def n_beads(self) -> int:
+        """Number of emitters/beads being fitted."""
+        return self.positions.numpy().shape[0]
+
+    def filter_by_mask(self, mask: np.ndarray) -> ZernikePSFVariables:
+        """Return a new instance with per-bead parameters filtered by *mask*.
+
+        Shared parameters (zernike_magnitude, zernike_phase, sigma) are kept
+        unchanged.
+        """
+        kwargs = {}
+        for name in self._ATTR_ORDER:
+            val = getattr(self, name).numpy()
+            if name in self._NFIT_ATTRS:
+                val = val[mask]
+            kwargs[name] = val
+        return ZernikePSFVariables(**kwargs)
+
+    def toTensorList(self) -> list[tf.Variable]:
+        """Return the underlying tf.Variable objects for optimizer apply_gradients.
+
+        The optimizer mutates these in-place via .assign(), so changes
+        are automatically reflected in this object's .value / .numpy().
+        """
+        return [getattr(self, name).variable for name in self._ATTR_ORDER]
+
+    def toNumpy(self) -> dict:
+        """Return a snapshot of all parameters as a dict of np.ndarrays."""
+        return {name: getattr(self, name).numpy() for name in self._ATTR_ORDER}
+
+    @classmethod
+    def fromTensorList(cls, tensors: list[tf.Tensor]) -> ZernikePSFVariables:
+        """Construct from a list of tensors/arrays (one per attribute in _ATTR_ORDER)."""
+        if len(tensors) != len(cls._ATTR_ORDER):
+            raise ValueError(
+                f"Expected {len(cls._ATTR_ORDER)} tensors, got {len(tensors)}"
+            )
+        return cls(**dict(zip(cls._ATTR_ORDER, tensors)))
+
+    def toLearnableParameterList(self) -> list[LearnableParameter]:
+        """Return the LearnableParameter objects in canonical order."""
+        return [getattr(self, name) for name in self._ATTR_ORDER]
+
+
+
 
 
 class PSFZernikeBased(PSFZernikeBase):
@@ -19,17 +137,21 @@ class PSFZernikeBased(PSFZernikeBase):
 
     def __init__(self, options: Any = None) -> None:
         self.parameters = None
-        self.data = None
+        self.data: Optional[PreprocessedImageDataInterface] = None
         self.Zphase = None
         self.zT = None
         self.bead_kernel = None
         self.options = options
-        self.initpupil = None
+        self.initpupil: Optional[Union[np.ndarray, list]] = None
+        self.initpsf: Optional[np.ndarray] = None
+        self.initzcoeff: Optional[np.ndarray] = None
+        self.initA: Optional[list] = None
+        self.Zoffset: Optional[np.ndarray] = None
         self.defocus = np.float32(0)
         self.default_loss_func = mse_real_zernike
         self.psftype = 'scalar'
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[list, Any]:
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[ZernikePSFVariables, Any]:
         """
         Provides initial values for the optimizable variables for the fitter class.
         """
@@ -90,52 +212,47 @@ class PSFZernikeBased(PSFZernikeBase):
         init_drift_xy = np.zeros((n_beads, 2), dtype=np.float32)
         init_intensity_grid = np.ones((n_beads, n_z_slices, 1, 1), dtype=np.float32) * init_intensities
 
-        self.varinfo = [
-            dict(type='Nfit', id=0),
-            dict(type='Nfit', id=0),
-            dict(type='Nfit', id=0),
-            dict(type='shared'),
-            dict(type='shared'),
-            dict(type='shared'),
-            dict(type='Nfit', id=0),
-        ]
 
         if options.model.var_photon:
             init_intensity = init_intensity_grid / self.weight["intensity"]
         else:
             init_intensity = init_intensities / self.weight["intensity"]
 
-        return [
+        return ZernikePSFVariables(
             init_positions.astype(np.float32),
             init_backgrounds.astype(np.float32),
             init_intensity.astype(np.float32),
             init_zernike_coeff_magnitude.astype(np.float32),
             init_zernike_coeff_phase.astype(np.float32),
             sigma.astype(np.float32),
-            init_drift_xy,
-        ], start_time
+            init_drift_xy),start_time
 
-    def calc_forward_images(self, variables: list) -> tf.Tensor:
+    def calc_forward_images(self, variables) -> tf.Tensor:
         """
         Calculate forward images from the current guess of the variables.
         Shifting is done by Fourier transform and applying a phase ramp.
 
-        Variable indices (for reference):
-            [0] positions: Emitter positions in ROI [n_beads, 2-4]
-            [1] backgrounds: Background level [n_beads, 1, 1, 1]
-            [2] intensities: Emitter intensity [n_beads, ...]
-            [3] zernike_magnitude: Zernike magnitude coeffs [n_zernike, 1, 1]
-            [4] zernike_phase: Zernike phase coeffs [n_zernike, 1, 1]
-            [5] sigma: Gaussian blur [2]
-            [6] drift_xy: Lateral drift [n_beads, 2]
+        Accepts either a ZernikePSFVariables object or a plain list of tensors
+        (the latter is used by the L-BFGS-B optimizer batching loop, which needs
+        raw tensors for gradient tracking).
         """
-        positions = variables[0]
-        backgrounds = variables[1]
-        intensities = variables[2]
-        zernike_coeff_magnitude = variables[3]
-        zernike_coeff_phase = variables[4]
-        sigma = variables[5]
-        drift_xy = variables[6]
+        if isinstance(variables, ZernikePSFVariables):
+            positions = variables.positions.value
+            backgrounds = variables.backgrounds.value
+            intensities = variables.intensities.value
+            zernike_coeff_magnitude = variables.zernike_magnitude.value
+            zernike_coeff_phase = variables.zernike_phase.value
+            sigma = variables.sigma.value
+            drift_xy = variables.drift_xy.value
+        else:
+            # Plain list: [positions, backgrounds, intensities, zernike_mag, zernike_phase, sigma, drift_xy]
+            positions = variables[0]
+            backgrounds = variables[1]
+            intensities = variables[2]
+            zernike_coeff_magnitude = variables[3]
+            zernike_coeff_phase = variables[4]
+            sigma = variables[5]
+            drift_xy = variables[6]
 
         if self.initpupil is not None:
             pupil = self.initpupil
@@ -212,28 +329,21 @@ class PSFZernikeBased(PSFZernikeBase):
 
         return psf_model, pupil
 
-    def postprocess(self, variables: list) -> list:
+    def postprocess(self, variables: ZernikePSFVariables) -> ZernikePSFResult:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
         psf and adapts intensities and background accordingly.
 
-        Variable indices (for reference):
-            [0] positions: Emitter positions in ROI [n_beads, 2-4]
-            [1] backgrounds: Background level [n_beads, 1, 1, 1]
-            [2] intensities: Emitter intensity [n_beads, ...]
-            [3] zernike_magnitude: Zernike magnitude coeffs [n_zernike, 1, 1]
-            [4] zernike_phase: Zernike phase coeffs [n_zernike, 1, 1]
-            [5] sigma: Gaussian blur [2]
-            [6] drift_xy: Lateral drift [n_beads, 2]
+        Accepts either a ZernikePSFVariables object or a plain list.
         """
-        positions = variables[0]
-        backgrounds = variables[1]
-        intensities = variables[2]
-        zernike_coeff_magnitude = variables[3]
-        zernike_coeff_phase = variables[4]
-        sigma = variables[5]
-        drift_xy = variables[6]
+        positions = variables.positions.numpy()
+        backgrounds = variables.backgrounds.numpy()
+        intensities = variables.intensities.numpy()
+        zernike_coeff_magnitude = variables.zernike_magnitude.numpy()
+        zernike_coeff_phase = variables.zernike_phase.numpy()
+        sigma = variables.sigma.numpy()
+        drift_xy = variables.drift_xy.numpy()
         z_center = (self.Zrange.shape[-3] - 1) // 2
 
         zernike_coeff_magnitude = zernike_coeff_magnitude * self.weight["zernikeMagnitude"]
@@ -254,6 +364,7 @@ class PSFZernikeBased(PSFZernikeBase):
                 sigma, Zcoeff_magnitude=zernike_coeff_magnitude, Zcoeff_phase=zernike_coeff_phase, addbead=True,
             )
 
+        assert self.data is not None
         _, _, centers, _ = self.data.get_image_data()
 
         if positions.shape[1] > 3:
@@ -274,35 +385,35 @@ class PSFZernikeBased(PSFZernikeBase):
                 )), 1, 0,
             )
 
-        return [
-            global_positions.astype(np.float32),
-            backgrounds * self.weight["background"],
-            intensities * self.weight["intensity"],
-            psf_model_bead,
-            psf_model,
-            np.complex64(pupil),
-            zernike_coeff_magnitude,
-            zernike_coeff_phase,
-            sigma,
-            drift_xy * self.weight["drift"],
-            np.flip(psf_model, axis=-3),
-            variables,
-        ]
+        return ZernikePSFResult(
+            positions=global_positions.astype(np.float32),
+            backgrounds=backgrounds * self.weight["background"],
+            intensities=intensities * self.weight["intensity"],
+            model_bead=psf_model_bead,
+            model=psf_model,
+            pupil=np.complex64(pupil),
+            zernike_magnitude=zernike_coeff_magnitude,
+            zernike_phase=zernike_coeff_phase,
+            sigma=sigma,
+            drift_xy=drift_xy * self.weight["drift"],
+            model_reversed=np.flip(psf_model, axis=-3),
+            _variables=variables,
+        )
 
-    def res2dict(self, res: list) -> dict[str, Any]:
-        """Convert optimization results to a dictionary with named fields."""
+    def res2dict(self, res: ZernikePSFResult) -> dict[str, Any]:
+        assert self.data is not None
         res_dict = dict(
-            pos=res[0],
-            bg=np.squeeze(res[1]),
-            intensity=np.squeeze(res[2]),
-            I_model_bead=res[3],
-            I_model=res[4],
-            pupil=res[5],
-            zernike_coeff=np.squeeze(res[6]),
-            sigma=np.squeeze(res[7]) / np.pi,
-            drift_rate=res[8],
-            I_model_reverse=res[9],
-            offset=np.min(res[4]),
+            pos=res.positions,
+            bg=np.squeeze(res.backgrounds),
+            intensity=np.squeeze(res.intensities),
+            I_model_bead=res.model_bead,
+            I_model=res.model,
+            pupil=res.pupil,
+            zernike_coeff=np.squeeze(res.zernike_magnitude),
+            sigma=np.squeeze(res.sigma) / np.pi,
+            drift_rate=res.drift_xy,
+            I_model_reverse=res.model_reversed,
+            offset=np.min(res.model),
             zernike_polynomial=self.Zk,
             apodization=self.apoid,
             cor_all=self.data.centers_all,

@@ -30,6 +30,7 @@ def mse_real(model, data, variables=None, mu=None, w=None):
         [5] sigma: Gaussian blur [2]
         [6] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
     mydiff = mydiff[:, 1:-1]
     data = data[:, 1:-1]
@@ -92,6 +93,7 @@ def mse_real_4pi(model, data, variables=None, mu=None, w=None):
         [9] wavelength: Wavelength [1]
         [10] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
     mydiff = mydiff[:, :, 1:-1]
     data = data[:, :, 1:-1]
@@ -154,6 +156,7 @@ def mse_real_4pi_All(model, data, loss_func, variables=None, mu=None, w=None, ps
     Wrapper for 4Pi PSF loss across multiple beads.
     Iterates over each bead and accumulates loss.
     """
+    assert variables is not None and w is not None and mu is not None
     varsize = len(variables)
     var = [None] * (varsize - 1)
     loss = 0.0
@@ -174,6 +177,7 @@ def mse_real_All(model, data, loss_func, variables=None, mu=None, w=None, psfnor
     Wrapper for PSF loss across multiple beads.
     Iterates over each bead and accumulates loss.
     """
+    assert variables is not None and w is not None and mu is not None
     varsize = len(variables)
     var = [None] * (varsize - 1)
     loss = 0.0
@@ -202,6 +206,7 @@ def mse_real_pupil(model, data, variables=None, mu=None, w=None, psfnorm=1.0):
         [5] sigma: Gaussian blur [2]
         [6] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -252,6 +257,7 @@ def mse_pupil_4pi(model, data, variables=None, mu=None, w=None, psfnorm=[1.0, 1.
         [8] wavelength: Wavelength [1]
         [9] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
     mse_norm2 = tf.reduce_mean(
@@ -300,15 +306,26 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for Zernike PSF.
     
-    Variables structure (7 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_magnitude: Zernike magnitude coeffs [n_zernike, 1, 1]
-        [4] zernike_phase: Zernike phase coeffs [n_zernike, 1, 1]
-        [5] sigma: Gaussian blur [2]
-        [6] drift_xy: Lateral drift [n_beads, 2]
+    Accepts either a ZernikePSFVariables object or a plain list of tensors.
+    The plain list form is used by the L-BFGS-B optimizer batching loop,
+    which passes raw tensors for gradient tracking.
     """
+    assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        # Raw tensor list: use directly (do NOT wrap in LearnablePSFParameters,
+        # as that would create new tf.Variables that break the gradient chain)
+        background = variables[1]
+        intensity = variables[2]
+        zernike_magnitude = variables[3]
+        sigma = variables[5]
+        drift_xy = variables[-1]
+    else:
+        background = variables.backgrounds.value
+        intensity = variables.intensities.value
+        zernike_magnitude = variables.zernike_magnitude.value
+        sigma = variables.sigma.value
+        drift_xy = variables.drift_xy.value
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -319,12 +336,6 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
 
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
-
-    background = variables[1]
-    intensity = variables[2]
-    zernike_magnitude = variables[3]
-    sigma = variables[5]
-    drift_xy = variables[-1]
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
 
@@ -355,6 +366,7 @@ def mse_zernike_4pi(model, data, variables=None, mu=None, w=None):
         [9] wavelength: Wavelength [1]
         [10] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -412,6 +424,7 @@ def mse_zernike_4pi_smlm(model, data, variables=None, mu=None, w=None):
         [10] alpha: Interference visibility [1]
         [11] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -463,6 +476,7 @@ def mse_real_zernike_FD(model, data, variables=None, mu=None, w=None):
         [4] sigma: Gaussian blur [2]
         [5] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -504,6 +518,7 @@ def mse_real_zernike_IMM(model, data, variables=None, mu=None, w=None):
         [4] sigma: Gaussian blur [2]
         [5] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -548,6 +563,7 @@ def mse_real_zernike_FD_smlm(model, data, variables=None, mu=None, w=None):
         [5] stage_position: Stage position [n_beads, 1, 1, 1]
         [6] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -593,6 +609,7 @@ def mse_real_zernike_smlm(model, data, variables=None, mu=None, w=None):
         [6] sigma: Gaussian blur [2]
         [7] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -638,6 +655,7 @@ def mse_real_pupil_smlm(model, data, variables=None, mu=None, w=None, psfnorm=1.
         [6] sigma: Gaussian blur [2]
         [7] drift_xy: Lateral drift [n_beads, 2]
     """
+    assert variables is not None and w is not None and mu is not None
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)

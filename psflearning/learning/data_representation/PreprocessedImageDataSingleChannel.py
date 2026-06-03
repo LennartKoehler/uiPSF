@@ -5,7 +5,9 @@ import os
 import h5py
 import numpy as np
 import scipy as sp
+import scipy.spatial
 import scipy.special as spf
+from scipy.spatial import distance_matrix
 
 import matplotlib.pyplot as plt
 from .. import imagetools as nip
@@ -40,20 +42,21 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         else:
             raise ValueError("is4pi should be True or False.")
 
-        self.images = None
+        self.images: Any = None
         self.check_and_init_images(images) # check if input is valid
-        self.rois = []
-        self.centers = []
-        self.file_idxs = []
+        self.rois = np.array([])
+        self.centers = np.array([])
+        self.channels: list = [self]
+        self.file_idxs = np.array([])
         self.rois_available = False
         self.min_border_dist = None # needed in cut_new_rois()
-        self.skew_const = None
-        self.zT = None
+        self.skew_const: Any = None
+        self.zT: Any = None
         return
 
     def check_and_init_images(self, images: Any) -> None:
         """
-        Checks if input is valid and initializes image attribute. 
+        Checks if input is valid and initializes image attribute.
         """
         try:
             # check if everything has same shape
@@ -61,7 +64,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             self.images = np.array(images, dtype=np.float32)
         except Exception:
             raise ValueError("Was not able to convert input to numpy array.\nCheck that dimensions are the same for all channels and for all images.")
-        
+
         if self.images.ndim != self.num_dims:
             raise ValueError(f"Input needs to have {self.num_dims} dimensions: {self.dim_names}.")
 
@@ -86,13 +89,13 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             rois, centers = nip.extractMultiPeaks(im2, ROIsize=roi_size, sigma=gaus_sigma,
                                                 borderDist=min_border_dist, threshold_rel=max_threshold,
                                                 alternateImg=image, kernel=max_kernel)
-            
+
             # remove rois/centers that are to close together
             if rois is not None:
                 if min_center_dist is None:
                     min_center_dist = np.hypot(roi_size[-2], roi_size[-1])
                 rois, centers = self.remove_close_rois(rois, centers, min_center_dist)
-                if FOV is not None:        
+                if FOV is not None:
                     fov = np.array(FOV)
                     #inFov = (coordinates[:,-1]>= fov[0]-fov[2]/2) & (coordinates[:,-1] <= fov[0]+fov[2]/2) & (coordinates[:,-2]>= fov[1]-fov[3]/2) & (coordinates[:,-2] <= fov[1]+fov[3]/2)
                     coord_r = (centers[:,-1]-fov[1])**2+(centers[:,-2]-fov[0])**2
@@ -131,7 +134,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         # in this case only the rois that is not to close to the border is cut
         # but since the other one is not the first one is not filtered out here
         # so it could be possible that there are two beads visible in one roi...
-        dist_matrix = sp.spatial.distance_matrix(centers, centers)
+        dist_matrix = distance_matrix(centers, centers)
         keep_matrix_idxs = np.where((0 == dist_matrix) | (dist_matrix > min_dist))
         unique, counts = np.unique(keep_matrix_idxs[0], return_counts=True)
         keep_idxs = unique[counts == centers.shape[0]]
@@ -146,7 +149,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             roi_size = self.rois.shape[-2:]
         if min_border_dist is None:
             min_border_dist = self.min_border_dist
-        
+
         if len(roi_size)==3:
             Nz = roi_size[0]
         else:
@@ -198,7 +201,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         else:
             raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
 
-    def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float, 
+    def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float,
                 min_center_dist: float | None = None, FOV: Any = None, modulation_period: float | None = None, padPSF: bool = True, plot: bool = True, isVolume: bool = True, pixelsize_y: float | None = None, skew_const: Any = None, max_bead_number: int | None = None) -> None:
         """
         Runs the full preprocessing pipeline including ROI finding, offset subtraction, and optional padding and deskewing.
@@ -249,7 +252,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             pixelsize_y = pixelsize_x
         self.pixelsize_y = pixelsize_y
 
-        
+
         if modulation_period is not None:
             self.zT = modulation_period/pixelsize_z
 
@@ -278,3 +281,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.skew_const = skew_const
         #self.rawrois = rois
         print(f"deskewed rois shape channel : {rois1.shape}")
+
+    def resetdata(self) -> None:
+        raise NotImplementedError("resetdata is not yet implemented for PreprocessedImageDataSingleChannel")

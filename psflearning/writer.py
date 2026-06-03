@@ -28,8 +28,8 @@ class Writer:
         psfobj,
         dataobj,
         fitter,
-        learning_result: list,
-        loc_result: list,
+        learning_result,
+        loc_result,
         loc_FD=None,
     ) -> str:
         """Save fitting results, localisation results, and ROI data to an
@@ -57,7 +57,7 @@ class Writer:
         str
             Path to the written HDF5 file.
         """
-        toc = loc_result[-2]
+        toc = loc_result.toc
         pbar = tqdm(
             desc="6/6: saving results",
             bar_format="{desc}: [{elapsed}s] {postfix[0]}{postfix[1][time]:>4.2f}s",
@@ -170,16 +170,16 @@ class Writer:
 
     @staticmethod
     def _build_locres_dict(
-        loc_result: list, coeff, coeff_reverse, loc_FD
+        loc_result, coeff, coeff_reverse, loc_FD
     ) -> dict:
         """Assemble the localisation-result dictionary for HDF5 storage."""
         d = dict(
-            P=loc_result[0],
-            CRLB=loc_result[1],
-            LL=loc_result[2],
+            P=loc_result.parameters,
+            CRLB=loc_result.crlb,
+            LL=loc_result.log_likelihood,
             coeff=coeff,
-            coeff_bead=loc_result[3],
-            loc=loc_result[-1],
+            coeff_bead=loc_result.spline_coefficients,
+            loc=loc_result.positions,
             coeff_reverse=coeff_reverse,
         )
         if loc_FD is not None:

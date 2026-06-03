@@ -8,13 +8,59 @@ customise the output.  No method calls ``plt.show()`` directly.
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple, Union
+import os
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import numpy as np
 from omegaconf import DictConfig
+
+
+def save_figs(
+    figs: Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]],
+    output_dir: str,
+    prefix: str,
+    fmt: str = "png",
+    dpi: int = 150,
+) -> List[str]:
+    """Save one or more Figures to *output_dir* with descriptive filenames.
+
+    Parameters
+    ----------
+    figs : Figure or list of Figure
+        The figure(s) to save.
+    output_dir : str
+        Directory to write into (created if it does not exist).
+    prefix : str
+        Filename prefix, e.g. ``"psf_vs_data"``.
+    fmt : str
+        File format extension (``"png"``, ``"pdf"``, ``"svg"``, …).
+    dpi : int
+        Resolution in dots per inch.
+
+    Returns
+    -------
+    list of str
+        Absolute paths of the saved files.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    if isinstance(figs, matplotlib.figure.Figure):
+        figs = [figs]
+
+    saved: List[str] = []
+    for i, fig in enumerate(figs):
+        if len(figs) == 1:
+            fname = f"{prefix}.{fmt}"
+        else:
+            fname = f"{prefix}_{i}.{fmt}"
+        path = os.path.join(output_dir, fname)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
+        plt.close(fig)
+        saved.append(os.path.abspath(path))
+    return saved
 
 
 class Plotter:
@@ -1008,6 +1054,65 @@ class Plotter:
             ax.legend(["all", "selected"])
 
         return fig
+
+    # ── Report generation ────────────────────────────────────────────────
+
+    def generate_report(
+        self,
+        f,
+        p,
+        output_dir: str,
+        index: int = 0,
+        fmt: str = "png",
+        dpi: int = 150,
+    ) -> Dict[str, List[str]]:
+        """Generate all standard plots and save them to *output_dir*.
+
+        Parameters
+        ----------
+        f : Fitter
+            Fitter / result object (has ``res``, ``rois``, ``locres``).
+        p : DictConfig
+            Experiment parameters.
+        output_dir : str
+            Directory where plot images are written.
+        index : int
+            Bead / ROI index for PSF-vs-data plots.
+        fmt : str
+            Image format (``"png"``, ``"pdf"``, …).
+        dpi : int
+            Resolution.
+
+        Returns
+        -------
+        dict
+            Mapping of plot name → list of saved file paths.
+        """
+        saved: Dict[str, List[str]] = {}
+
+        fig = self.plot_psf_vs_data(f, p, index=index)
+        saved["psf_vs_data"] = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
+
+        fig = self.plot_localization(f, p)
+        saved["localization"] = save_figs(fig, output_dir, "localization", fmt, dpi)
+
+        try:
+            figs = self.plot_zernike(f, p)
+            saved["zernike"] = save_figs(figs, output_dir, "zernike", fmt, dpi)
+        except Exception:
+            try:
+                figs = self.plot_pupil(f, p)
+                saved["pupil"] = save_figs(figs, output_dir, "pupil", fmt, dpi)
+            except Exception:
+                print("no pupil / zernike plot available")
+
+        fig = self.plot_learned_params(f, p)
+        saved["learned_params"] = save_figs(fig, output_dir, "learned_params", fmt, dpi)
+
+        fig = self.plot_coordinates(f, p)
+        saved["coordinates"] = save_figs(fig, output_dir, "coordinates", fmt, dpi)
+
+        return saved
 
     # ── Strehl ratio ─────────────────────────────────────────────────────
 

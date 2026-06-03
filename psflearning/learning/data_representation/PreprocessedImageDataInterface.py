@@ -4,6 +4,8 @@ from abc import ABCMeta, abstractmethod
 import pickle
 from typing import Any
 
+import numpy as np
+
 
 class PreprocessedImageDataInterface:
     """
@@ -14,6 +16,17 @@ class PreprocessedImageDataInterface:
     """
 
     __metaclass__ = ABCMeta
+
+    rois: np.ndarray
+    centers: np.ndarray
+    centers_all: np.ndarray
+    images: np.ndarray
+    pixelsize_x: float
+    pixelsize_y: float
+    pixelsize_z: float
+    bead_radius: float
+    image_size: tuple
+    skew_const: object
 
     @abstractmethod
     def get_image_data(self) -> list:

@@ -30,7 +30,7 @@ class Localizer:
 
     def localize(
         self,
-        res: List[np.ndarray],
+        res: Any,
         channeltype: str,
         usecuda: bool = True,
         initz: Optional[Any] = None,
@@ -38,12 +38,12 @@ class Localizer:
         start_time: Optional[float] = None,
     ) -> Any:
         """Localize emitters using the fitted PSF model and compute rejection metrics."""
-        intensity = np.abs(np.squeeze(res[2], axis=(-1, -2)))
-        if res[2].dtype == 'complex64':
+        intensity = np.abs(np.squeeze(res.intensities, axis=(-1, -2)))
+        if res.intensities.dtype == 'complex64':
             intensityR = intensity
         else:
-            intensityR = np.real(np.squeeze(res[2], axis=(-1, -2)))
-        I_model = res[3]
+            intensityR = np.real(np.squeeze(res.intensities, axis=(-1, -2)))
+        I_model = res.model_bead
         psf_fit = self.forward_images
         psf_data = self.rois
         pz = self.data.pixelsize_z
@@ -56,19 +56,19 @@ class Localizer:
 
         elif channeltype == 'multi':
             _, _, centers, _ = self.data.get_image_data()
-            cor = np.stack(centers)[..., -2:]
+            cor = np.stack(centers)[..., -2:]  # pyright: ignore[reportCallIssue]
             imgcenter = self.psf.imgcenter
-            T = res[-2]
+            T = res.drift_xy
             locres = dll.loc_ast_dual(psf_data, I_model, pz, cor, imgcenter, T, initz=initz, plot=plot, start_time=start_time)
             mydiff = psf_fit[:, :, 1:-1] - psf_data[:, :, 1:-1]
             mse1 = np.mean(np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(psf_data, axis=(-3, -2, -1)), axis=0)
 
         elif channeltype == '4pi':
             _, _, centers, _ = self.data.get_image_data()
-            A_model = res[4]
+            A_model = res.model
             cor = np.stack(centers)
             imgcenter = self.psf.imgcenter
-            T = np.squeeze(res[-2])
+            T = np.squeeze(res.drift_xy)
             zT = np.array([self.psf.sub_psfs[0].zT])
             locres = dll.loc_4pi(psf_data, I_model, A_model, pz, cor, imgcenter, T, zT, initz=initz, plot=plot, start_time=start_time)
             mydiff = psf_fit[:, :, :, 1:-1] - psf_data[:, :, :, 1:-1]
@@ -97,7 +97,7 @@ class Localizer:
         else:
             intRatio = np.square(avgI - np.median(avgI)) / np.median(avgI) / avgI
             mseRatio = mse1 / np.median(mse1)
-        msezRatio = locres[4]
+        msezRatio = locres.mse_z_ratio
         metric = [msezRatio, mseRatio, intRatio]
         label = ['relative MSE in z', 'relative MSE']
         if plot & (mseRatio.size > 1):
@@ -118,14 +118,14 @@ class Localizer:
 
     def localize_smlm(
         self,
-        res: List[np.ndarray],
+        res,
         channeltype: str,
         usecuda: bool = True,
         initz: Optional[Any] = None,
         plot: bool = True,
     ) -> Any:
         """Localize emitters in SMLM data using the fitted PSF model."""
-        I_model = res[3]
+        I_model = res.model_bead
 
         psf_data = self.rois
         pz = self.data.pixelsize_z
@@ -138,15 +138,15 @@ class Localizer:
             _, _, centers, _ = self.data.get_image_data()
             cor = np.stack(centers)
             imgcenter = self.psf.imgcenter
-            T = res[-2]
+            T = res.drift_xy
             locres = dll.loc_ast_dual(psf_data, I_model, pz, cor, imgcenter, T, initz=initz, plot=plot)
 
         elif channeltype == '4pi':
             _, _, centers, _ = self.data.get_image_data()
-            A_model = res[4]
+            A_model = res.model
             cor = np.stack(centers)
             imgcenter = self.psf.imgcenter
-            T = np.squeeze(res[-2])
+            T = np.squeeze(res.drift_xy)
             zT = np.array([self.data.channels[0].zT])
             locres = dll.loc_4pi(psf_data, I_model, A_model, pz, cor, imgcenter, T, zT, initz=initz, plot=plot)
 
@@ -157,7 +157,7 @@ class Localizer:
 
     def localize_FD(
         self,
-        res: List[np.ndarray],
+        res: Any,
         channeltype: str,
         usecuda: bool = True,
         initz: Optional[Any] = None,
@@ -183,12 +183,12 @@ class Localizer:
             elif channeltype == 'multi':
 
                 imgcenter = self.psf.imgcenter
-                T = res[-2]
+                T = res.drift_xy
                 loci = dll.loc_ast_dual(psf_data[:, i:i + 1], I_model_all[:, i], pz, cor[:, i:i + 1], imgcenter, T, initz=initz, start_time=0)
 
-            x.append(np.squeeze(loci[-1]['x']))
-            y.append(np.squeeze(loci[-1]['y']))
-            z.append(np.squeeze(loci[-1]['z']))
+            x.append(np.squeeze(loci.positions['x']))
+            y.append(np.squeeze(loci.positions['y']))
+            z.append(np.squeeze(loci.positions['z']))
 
         xf = np.stack(x)
         yf = np.stack(y)

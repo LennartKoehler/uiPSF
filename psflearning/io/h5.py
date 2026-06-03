@@ -21,5 +21,5 @@ def load(path: str | Path) -> tuple[DottedDict, DictConfig]:
     """
     with h5py.File(path, "r") as f:
         res = DottedDict(hdfdict.load(f, lazy=False))
-        params = OmegaConf.create(f.attrs["params"])
+        params = OmegaConf.create(f.attrs["params"])  # type: ignore[reportCallIssue]
     return res, params

@@ -1,17 +1,116 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import pickle
 
 import numpy as np
 import tensorflow as tf
 import scipy.special as spf
+from typing import Any, List
 
 from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .. import utilities as im
 from .. import imagetools as nip
+from enum import Enum
 
-class PSFInterface():
+class ParameterScope(Enum):
+    SHARED = 0
+    NFIT = 1
+
+
+
+class LearnableParameter:
+    """A learnable parameter that stores its value as a tf.Variable internally.
+
+    This allows:
+    - In-place mutation by the optimizer (via tf.Variable.assign)
+    - Differentiable access via .value (returns a tf.Tensor tracked by GradientTape)
+    - Numpy access via .numpy() (returns an np.ndarray snapshot)
+    """
+    scope : ParameterScope
+    _variable : tf.Variable
+    id : int
+
+    def __init__(self, scope : ParameterScope, value : np.ndarray | tf.Tensor, id : int):
+        self.scope = scope
+        self._variable = tf.Variable(value, dtype=tf.float32)
+        self.id = id
+
+    @property
+    def value(self) -> tf.Tensor:
+        """Return the current value as a tf.Tensor (differentiable, tracked by GradientTape).
+
+        Uses read_value() instead of the .value attribute because tf.Variable.value
+        is a method in many TF versions, and read_value() is the explicit, portable
+        way to get a differentiable tensor from a Variable.
+        """
+        return self._variable.read_value()
+
+    @value.setter
+    def value(self, new_val : np.ndarray | tf.Tensor) -> None:
+        """Update the value in-place via tf.Variable.assign."""
+        self._variable.assign(new_val)
+
+    def numpy(self) -> np.ndarray:
+        """Return a numpy snapshot of the current value."""
+        return self._variable.numpy()
+
+    @property
+    def variable(self) -> tf.Variable:
+        """Direct access to the underlying tf.Variable (for optimizer apply_gradients)."""
+        return self._variable
+
+
+class LearnablePSFParameters(ABC):
+
+    @abstractmethod
+    def toTensorList(self) -> List[tf.Variable]:
+        """Return the underlying tf.Variable objects (for optimizer apply_gradients).
+
+        The returned Variables are the actual mutable storage — the optimizer
+        will call .assign() on them in-place, so mutations are visible through
+        this object's .value and .numpy() properties.
+        """
+        ...
+
+    @abstractmethod
+    def toNumpy(self) -> dict:
+        """Return a snapshot of all parameters as a dict of np.ndarrays."""
+        ...
+
+    @classmethod
+    @abstractmethod
+    def fromTensorList(cls, tensors: List[tf.Tensor]) -> LearnablePSFParameters:
+        """Construct an instance from a list of tensors/arrays."""
+        ...
+
+    @abstractmethod
+    def toLearnableParameterList(self) -> List[LearnableParameter]:
+        """Return the LearnableParameter objects in canonical order.
+
+        Used by optimizers that need access to each parameter's scope (SHARED/NFIT)
+        and id (batch dimension index) for batching logic.
+        """
+        ...
+
+    @property
+    @abstractmethod
+    def n_beads(self) -> int:
+        """Number of emitters/beads being fitted."""
+        ...
+
+    @abstractmethod
+    def filter_by_mask(self, mask: np.ndarray) -> LearnablePSFParameters:
+        """Return a new instance with per-bead (NFIT) parameters filtered by *mask*.
+
+        Shared parameters are kept unchanged.  *mask* is a boolean array
+        of shape ``(n_beads,)``.
+        """
+        ...
+
+
+
+class PSFInterface(ABC):
     """
     Interface that ensures consistency and compatability between all old and new implementations of data classes, fitters and psfs.
     Classes implementing this interafce define a psf model/parametrization. They describe how the parameters of the psf are used to calculate a forward image
@@ -19,7 +118,34 @@ class PSFInterface():
     since they depend on the nature of the psf model/parametrization.
     """
 
-    __metaclass__ = ABCMeta
+    data: PreprocessedImageDataInterface
+    bead_kernel: Any
+    options: Any
+    aperture: Any
+    apoid: Any
+    paramxy: Any
+    normf: Any
+    Zrange: Any
+    kx: Any
+    ky: Any
+    kz: Any
+    kz_med: Any
+    Zk: Any
+    zv: Any
+    kxv: Any
+    kyv: Any
+    kzv: Any
+    kspace: Any
+    kspace_x: Any
+    kspace_y: Any
+    spherical_terms: Any
+    dipole_field: Any
+    defocus: Any
+    ind: list
+    psftype: str
+    imgcenter: Any
+    sub_psfs: Any
+    psfnorm: Any
 
     @abstractmethod
     def calc_initials(self, data: PreprocessedImageDataInterface) -> list:
@@ -29,14 +155,14 @@ class PSFInterface():
         raise NotImplementedError("You need to implement a 'calc_initials' method in your psf class.")
 
     @abstractmethod
-    def calc_forward_images(self, variables: list) -> tf.Tensor:
+    def calc_forward_images(self, variables) -> tf.Tensor:
         """
         Calculates the forward images.
         """
         raise NotImplementedError("You need to implement a 'calc_forward_images' method in your psf class.")
 
     @abstractmethod
-    def postprocess(self, variables: list) -> list:
+    def postprocess(self, variables) -> Any:
         """
         Postprocesses the optimized variables. For example, normalizes the psf or calculates global positions.
         """
@@ -64,6 +190,7 @@ class PSFInterface():
         """
         if Nz is None:
             Nz = self.bead_kernel.shape[0]
+        assert Nz is not None
         bin = self.options.model.bin
         Lx = self.data.rois.shape[-1]*bin
         Ly = self.data.rois.shape[-2]*bin
@@ -222,7 +349,7 @@ class PSFInterface():
         """
         res = im.totensor(img)
         myshape = im.shapevec(res)
-        ShiftDims = shiftvec.shape[-1]
+        ShiftDims = int(shiftvec.shape[-1])
         for d in range(1, ShiftDims+1):
             myshifts = shiftvec[..., -d]
             for ed in range(len(myshape) - len(myshifts.shape)):
