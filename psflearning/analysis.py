@@ -73,8 +73,11 @@ def genpsf(
 
 def _genpsf_single(psfobj, dataobj, f, p, Nz, stagepos):
     sigma = f.res.sigma
-    Zcoeff = f.res.zernike_coeff.reshape(
-        f.res.zernike_coeff.shape + (1, 1)
+    Zcoeff_magnitude = f.res.zernike_coeff[0].reshape(
+        f.res.zernike_coeff[0].shape + (1, 1)
+    )
+    Zcoeff_phase = f.res.zernike_coeff[1].reshape(
+        f.res.zernike_coeff[1].shape + (1, 1)
     )
     psfobj.data = dataobj
 
@@ -89,7 +92,7 @@ def _genpsf_single(psfobj, dataobj, f, p, Nz, stagepos):
     if "FD" in p.PSFtype:
         f.res.I_model = _genpsf_fd(psfobj, f, sigma)
     else:
-        f.res.I_model, _ = psfobj.genpsfmodel(sigma, Zcoeff)
+        f.res.I_model, _ = psfobj.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
 
 
 def _genpsf_fd(psfobj, f, sigma):
@@ -132,8 +135,12 @@ def _genpsf_multi(psfobj, dataobj, f, p, Nz, stagepos):
         psfobj.sub_psfs[i] = psf
 
         sigma = f.res["channel" + str(i)].sigma
-        Zcoeff = f.res["channel" + str(i)].zernike_coeff
-        Zcoeff = Zcoeff.reshape(Zcoeff.shape + (1, 1))
+        Zcoeff_magnitude = f.res["channel" + str(i)].zernike_coeff[0].reshape(
+            f.res["channel" + str(i)].zernike_coeff[0].shape + (1, 1)
+        )
+        Zcoeff_phase = f.res["channel" + str(i)].zernike_coeff[1].reshape(
+            f.res["channel" + str(i)].zernike_coeff[1].shape + (1, 1)
+        )
         psf.data = dataobj
 
         if "insitu" in p.PSFtype:
@@ -144,7 +151,7 @@ def _genpsf_multi(psfobj, dataobj, f, p, Nz, stagepos):
         else:
             psf.calpupilfield("scalar", Nz=Nz)
 
-        I_model, _ = psf.genpsfmodel(sigma, Zcoeff)
+        I_model, _ = psf.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
         f.res["channel" + str(i)].I_model = I_model
 
 
@@ -212,7 +219,7 @@ def _strehl_single(p, f1, f, psf_info, xsz):
         )
         return strehlratio_map
 
-    f1.res.zernike_coeff[1, 0:4] = 0.0
+    f1.res.zernike_coeff[1, :, 0:4] = 0.0
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
     I1 = f1.res.I_model[0, xsz // 2, xsz // 2] / np.sum(
         f1.res.I_model
@@ -221,7 +228,7 @@ def _strehl_single(p, f1, f, psf_info, xsz):
     f1.res.zernike_coeff = np.zeros(
         f1.res.zernike_coeff.shape, dtype=np.float32
     )
-    f1.res.zernike_coeff[0, 0] = 1
+    f1.res.zernike_coeff[0, :, 0] = 1
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
     I0 = f1.res.I_model[0, xsz // 2, xsz // 2] / np.sum(
         f1.res.I_model
@@ -237,13 +244,13 @@ def _strehl_multi(p, f1, psf_info, xsz):
     I1, I0 = [], []
 
     for i in range(n_channel):
-        f1.res["channel" + str(i)].zernike_coeff[1, 0:4] = 0.0
+        f1.res["channel" + str(i)].zernike_coeff[1, :, 0:4] = 0.0
 
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
     coeff = np.zeros(
         f1.res.channel0.zernike_coeff.shape, dtype=np.float32
     )
-    coeff[0, 0] = 1
+    coeff[0, :, 0] = 1
 
     for i in range(n_channel):
         I_model = f1.res["channel" + str(i)].I_model

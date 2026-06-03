@@ -6,8 +6,15 @@ RUN apt-get install -y python3 python3-pip python3-tk
 
 
 WORKDIR /app
+
+# --- Dependency installation (cached unless setup.py changes) ---
+COPY setup.py /app/setup.py
+COPY README.md /app/README.md
+RUN mkdir -p /app/psflearning && touch /app/psflearning/__init__.py
+RUN pip install /app
+
+# --- Source code copy + editable install (no-deps, fast) ---
 COPY . /app
+RUN pip install --no-deps -e /app
 
-
-RUN pip install -e .
 CMD ["python3", "test/demo/test_demo_beadPSF_1ch.py"]

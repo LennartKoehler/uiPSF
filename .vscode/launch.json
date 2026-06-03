@@ -23,13 +23,13 @@
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
-        {
+{
             "name": "Python: test_demo_beadPSF_1ch",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/demo/test_demo_beadPSF_1ch.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/demo",
+            "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
@@ -62,7 +62,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/test/demo/test_demo_insituPSF_FD.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/test/demo",
+            "cwd": "${workspaceFolder}",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }

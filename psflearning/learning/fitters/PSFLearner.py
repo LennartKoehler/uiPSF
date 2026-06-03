@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from psflearning.learning.psfs.PSFVolumeBased4pi import PSFVolumeBased4pi
 from .FitterInterface import FitterInterface
 from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from ..psfs.PSFInterface import PSFInterface

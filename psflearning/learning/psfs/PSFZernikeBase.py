@@ -61,7 +61,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             pupil_mag * tfm.sin(pupil_phase),
         ) * self.aperture * self.apoid
 
-    def __compute_phase(
+    def _compute_phase(
         self,
         pos: tf.Tensor,
         Zrange,

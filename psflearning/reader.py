@@ -14,13 +14,15 @@ import numpy as np
 from dotted_dict import DottedDict
 from omegaconf import DictConfig, OmegaConf
 
+from psflearning.learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+
 from .dataloader import get_loader
-from .learning import (
-    PreprocessedImageDataMultiChannel,
-    PreprocessedImageDataMultiChannel_smlm,
-    PreprocessedImageDataSingleChannel,
-    PreprocessedImageDataSingleChannel_smlm,
-)
+# from .learning import (
+#     PreprocessedImageDataMultiChannel,
+#     PreprocessedImageDataMultiChannel_smlm,
+#     PreprocessedImageDataSingleChannel,
+#     PreprocessedImageDataSingleChannel_smlm,
+# )
 
 
 class Reader:
@@ -357,33 +359,34 @@ class Reader:
         is_insitu = "insitu" in param.PSFtype
 
         if channeltype == "single":
-            cls = (
-                PreprocessedImageDataSingleChannel_smlm
-                if is_insitu
-                else PreprocessedImageDataSingleChannel
-            )
+            cls = PreprocessedImageDataSingleChannel
+            # cls = (
+            #     PreprocessedImageDataSingleChannel_smlm
+            #     if is_insitu
+            #     else PreprocessedImageDataSingleChannel
+            # )
             return cls(images)
 
-        if channeltype == "4pi":
-            if is_insitu:
-                return PreprocessedImageDataMultiChannel_smlm(
-                    images,
-                    PreprocessedImageDataSingleChannel_smlm,
-                    is4pi=True,
-                )
-            return PreprocessedImageDataMultiChannel(
-                images,
-                PreprocessedImageDataSingleChannel,
-                is4pi=True,
-            )
-
-        if is_insitu:
-            return PreprocessedImageDataMultiChannel_smlm(
-                images, PreprocessedImageDataSingleChannel_smlm
-            )
-        return PreprocessedImageDataMultiChannel(
-            images, PreprocessedImageDataSingleChannel
-        )
+        # if channeltype == "4pi":
+        #     if is_insitu:
+        #         return PreprocessedImageDataMultiChannel_smlm(
+        #             images,
+        #             PreprocessedImageDataSingleChannel_smlm,
+        #             is4pi=True,
+        #         )
+        #     return PreprocessedImageDataMultiChannel(
+        #         images,
+        #         PreprocessedImageDataSingleChannel,
+        #         is4pi=True,
+        #     )
+        #
+        # if is_insitu:
+        #     return PreprocessedImageDataMultiChannel_smlm(
+        #         images, PreprocessedImageDataSingleChannel_smlm
+        #     )
+        # return PreprocessedImageDataMultiChannel(
+        #     images, PreprocessedImageDataSingleChannel
+        # )
 
 
 # ── Module-level helpers ─────────────────────────────────────────────────

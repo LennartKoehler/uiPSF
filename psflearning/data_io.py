@@ -11,12 +11,6 @@ preparing :class:`PreprocessedImageData` objects ready for PSF fitting.
 import numpy as np
 
 from .dataloader import get_loader
-from .learning import (
-    PreprocessedImageDataSingleChannel,
-    PreprocessedImageDataMultiChannel,
-    PreprocessedImageDataSingleChannel_smlm,
-    PreprocessedImageDataMultiChannel_smlm,
-)
 
 
 # ── Data loading ───────────────────────────────────────────────────────
@@ -188,30 +182,36 @@ def _crop_fov(images, fov):
     ims = ims[zind]
     return np.swapaxes(ims, 0, -3)
 
-
-def _create_dataobj(images, param):
-    """Instantiate the correct :class:`PreprocessedImageData` subclass."""
-    channeltype = param.channeltype
-    is_insitu = "insitu" in param.PSFtype
-
-    if channeltype == "single":
-        cls = PreprocessedImageDataSingleChannel_smlm if is_insitu else PreprocessedImageDataSingleChannel
-        return cls(images)
-
-    if channeltype == "4pi":
-        if is_insitu:
-            return PreprocessedImageDataMultiChannel_smlm(
-                images, PreprocessedImageDataSingleChannel_smlm, is4pi=True
-            )
-        return PreprocessedImageDataMultiChannel(
-            images, PreprocessedImageDataSingleChannel, is4pi=True
-        )
-
-    # multi
-    if is_insitu:
-        return PreprocessedImageDataMultiChannel_smlm(
-            images, PreprocessedImageDataSingleChannel_smlm
-        )
-    return PreprocessedImageDataMultiChannel(
-        images, PreprocessedImageDataSingleChannel
-    )
+# from .learning import (
+#     PreprocessedImageDataSingleChannel,
+#     PreprocessedImageDataMultiChannel,
+#     PreprocessedImageDataSingleChannel_smlm,
+#     PreprocessedImageDataMultiChannel_smlm,
+# )
+#
+# def _create_dataobj(images, param):
+#     """Instantiate the correct :class:`PreprocessedImageData` subclass."""
+#     channeltype = param.channeltype
+#     is_insitu = "insitu" in param.PSFtype
+#
+#     if channeltype == "single":
+#         cls = PreprocessedImageDataSingleChannel_smlm if is_insitu else PreprocessedImageDataSingleChannel
+#         return cls(images)
+#
+#     if channeltype == "4pi":
+#         if is_insitu:
+#             return PreprocessedImageDataMultiChannel_smlm(
+#                 images, PreprocessedImageDataSingleChannel_smlm, is4pi=True
+#             )
+#         return PreprocessedImageDataMultiChannel(
+#             images, PreprocessedImageDataSingleChannel, is4pi=True
+#         )
+#
+#     # multi
+#     if is_insitu:
+#         return PreprocessedImageDataMultiChannel_smlm(
+#             images, PreprocessedImageDataSingleChannel_smlm
+#         )
+#     return PreprocessedImageDataMultiChannel(
+#         images, PreprocessedImageDataSingleChannel
+#     )

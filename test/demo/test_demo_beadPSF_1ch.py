@@ -4,7 +4,8 @@ from psflearning.psflearninglib import PSFLearningLib
 from psflearning import io
 import tensorflow as tf
 
-main_data_dir = io.param.load('demo/datapath.yaml').main_data_dir
+# main_data_dir = io.param.load('test/demo/datapath.yaml').main_data_dir
+main_data_dir = 'example_data_for_uiPSF'
 
 try:
     gpus = tf.config.list_physical_devices('GPU')
