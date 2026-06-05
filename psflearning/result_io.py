@@ -15,23 +15,24 @@ from tqdm import tqdm
 from omegaconf import OmegaConf
 
 from .learning import psf2cspline_np
+from .learning.psf_variables import LocResResult, Positions, PSFResult, ROIsResult
 
 
 # ── Cubic-spline generation ────────────────────────────────────────────
 
-def gencspline(param, res_dict, psfobj, keyname="I_model"):
+def gencspline(param, res: PSFResult, psfobj, keyname="I_model"):
     """Generate cubic-spline coefficients from the fitted PSF model.
 
     Parameters
     ----------
     param : OmegaConf
         Experiment parameters (``channeltype`` is used).
-    res_dict : dict
-        Result dictionary produced by ``psfobj.res2dict``.
+    res : PSFResult
+        Result produced by ``psfobj.res2dict``.
     psfobj : PSFInterface
         PSF model object (used for ``sub_psfs`` in multi-channel mode).
     keyname : str
-        Key to look up in *res_dict* (``"I_model"`` or
+        Key to look up in *res* (``"I_model"`` or
         ``"I_model_reverse"``).
 
     Returns
@@ -42,19 +43,19 @@ def gencspline(param, res_dict, psfobj, keyname="I_model"):
     channeltype = param.channeltype
 
     if channeltype == "single":
-        return _gencspline_single(res_dict, keyname)
+        return _gencspline_single(res, keyname)
     if channeltype == "multi":
-        return _gencspline_multi(res_dict, psfobj, keyname)
+        return _gencspline_multi(res, psfobj, keyname)
     if channeltype == "4pi":
-        return _gencspline_4pi(res_dict, psfobj, keyname)
+        return _gencspline_4pi(res, psfobj, keyname)
 
     return []
 
 
-def _gencspline_single(res_dict, keyname):
-    if keyname not in res_dict:
+def _gencspline_single(res: PSFResult, keyname):
+    if keyname not in res:
         return []
-    I_model = res_dict[keyname]
+    I_model = res[keyname]
     offset = np.min(I_model)
     Imd = I_model - offset
     normf = np.median(np.sum(Imd, axis=(-1, -2)))
@@ -63,11 +64,12 @@ def _gencspline_single(res_dict, keyname):
     return coeff.astype(np.float32)
 
 
-def _gencspline_multi(res_dict, psfobj, keyname):
-    if keyname not in res_dict.get("channel0", {}):
+def _gencspline_multi(res: PSFResult, psfobj, keyname):
+    ch0 = res.get("channel0")
+    if ch0 is None or keyname not in ch0:
         return []
     n_channel = len(psfobj.sub_psfs)
-    I_model = np.stack([res_dict["channel" + str(i)][keyname]
+    I_model = np.stack([res["channel" + str(i)][keyname]
                         for i in range(n_channel)])
     offset = np.min(I_model)
     Imd = I_model - offset
@@ -77,15 +79,16 @@ def _gencspline_multi(res_dict, psfobj, keyname):
     return np.stack(Iall).astype(np.float32)
 
 
-def _gencspline_4pi(res_dict, psfobj, keyname):
-    if keyname not in res_dict.get("channel0", {}):
+def _gencspline_4pi(res: PSFResult, psfobj, keyname):
+    ch0 = res.get("channel0")
+    if ch0 is None or keyname not in ch0:
         return []
     n_channel = len(psfobj.sub_psfs)
 
     I_model_list = []
     A_model_list = []
     for i in range(n_channel):
-        ch = res_dict["channel" + str(i)]
+        ch = res["channel" + str(i)]
         I_model_list.append(ch[keyname])
         a_key = "A_model" if keyname == "I_model" else "A_model_reverse"
         A_model_list.append(ch[a_key])
@@ -144,16 +147,16 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
     )
 
     savename = param.savename + "_" + param.PSFtype + "_" + param.channeltype
-    res_dict = psfobj.res2dict(learning_result)
+    res = psfobj.res2dict(learning_result)
 
-    coeff_reverse = gencspline(param, res_dict, psfobj, keyname="I_model_reverse")
-    coeff = gencspline(param, res_dict, psfobj)
+    coeff_reverse = gencspline(param, res, psfobj, keyname="I_model_reverse")
+    coeff = gencspline(param, res, psfobj)
 
-    locres_dict = _build_locres_dict(loc_result, coeff, coeff_reverse, loc_FD)
+    locres = _build_locres(loc_result, coeff, coeff_reverse, loc_FD)
 
     img, _, centers, file_idxs = dataobj.get_image_data()
     img = np.stack(img)
-    rois_dict = dict(
+    rois = ROIsResult(
         cor=np.stack(centers),
         fileID=np.stack(file_idxs),
         psf_data=fitter.rois,
@@ -162,7 +165,7 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
     )
 
     resfile = savename + ".h5"
-    writeh5file(param, resfile, res_dict, locres_dict, rois_dict)
+    writeh5file(param, resfile, res, locres, rois)
 
     pbar.postfix[1]["time"] = toc + pbar._time() - pbar.start_t
     pbar.update()
@@ -170,41 +173,64 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
     return resfile
 
 
-def _build_locres_dict(loc_result, coeff, coeff_reverse, loc_FD):
-    """Assemble the localisation-result dictionary for HDF5 storage."""
-    d = dict(
+def _build_locres(loc_result, coeff, coeff_reverse, loc_FD):
+    """Assemble the localization result for HDF5 storage."""
+    loc = loc_result.positions
+    if isinstance(loc, dict):
+        loc = Positions(
+            x=loc.get("x"), y=loc.get("y"), z=loc.get("z"),
+            zast=loc.get("zast"),
+        )
+
+    loc_fd_obj = None
+    if loc_FD is not None:
+        if isinstance(loc_FD, dict):
+            loc_fd_obj = Positions(
+                x=loc_FD.get("x"), y=loc_FD.get("y"), z=loc_FD.get("z"),
+            )
+        else:
+            loc_fd_obj = loc_FD
+
+    return LocResResult(
         P=loc_result.parameters,
         CRLB=loc_result.crlb,
         LL=loc_result.log_likelihood,
         coeff=coeff,
         coeff_bead=loc_result.spline_coefficients,
-        loc=loc_result.positions,
+        loc=loc,
         coeff_reverse=coeff_reverse,
+        loc_FD=loc_fd_obj,
     )
-    if loc_FD is not None:
-        d["loc_FD"] = loc_FD
-    return d
 
 
 # ── HDF5 I/O ───────────────────────────────────────────────────────────
 
-def writeh5file(param, filename, res_dict, locres_dict, rois_dict):
-    """Write result dictionaries to an HDF5 file.
+def writeh5file(param, filename, res: PSFResult, locres: LocResResult, rois: ROIsResult):
+    """Write result dataclasses to an HDF5 file.
 
     Parameters
     ----------
-    param : OmegaConf
+    param : RunParameters or DictConfig
         Experiment parameters (serialised as a JSON attribute).
     filename : str
         Output path.
-    res_dict, locres_dict, rois_dict : dict
-        Data to write into the ``res``, ``locres`` and ``rois`` groups.
+    res : PSFResult
+        PSF fitting result.
+    locres : LocResResult
+        Localization result.
+    rois : ROIsResult
+        ROI data.
     """
+    from .io.param import RunParameters
+    if isinstance(param, RunParameters):
+        param_dict = param.to_dict()
+    else:
+        param_dict = OmegaConf.to_container(param)
     with h5.File(filename, "w") as f:
-        f.attrs["params"] = json.dumps(OmegaConf.to_container(param))
-        _write_group(f.create_group("locres"), locres_dict)
-        _write_group(f.create_group("res"), res_dict)
-        _write_group(f.create_group("rois"), rois_dict)
+        f.attrs["params"] = json.dumps(param_dict)
+        _write_group(f.create_group("locres"), locres.to_dict())
+        _write_group(f.create_group("res"), res.to_dict())
+        _write_group(f.create_group("rois"), rois.to_dict())
 
 
 def _write_group(group, data):

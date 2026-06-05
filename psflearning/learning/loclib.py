@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
-All rights reserved     
+All rights reserved
 
 @author: Sheng Liu
 """
@@ -20,6 +20,8 @@ import tensorflow as tf
 from psflearning import io
 from dataclasses import dataclass
 from typing import Any
+
+from .psf_variables import Positions
 
 
 @dataclass
@@ -50,7 +52,7 @@ class LocalizationResult:
     spline_coefficients: np.ndarray
     mse_z_ratio: np.ndarray
     toc: float
-    positions: dict[str, np.ndarray]
+    positions: Positions
 #%%
 class localizationlib:
     def __init__(self, usecuda: bool = False) -> None:
@@ -65,10 +67,10 @@ class localizationlib:
             dllpath_gpu_4pi = pkgpath+cfg.Paths.spline.win.cuda.fpi
             dllpath_cpu_ast = pkgpath+cfg.Paths.spline.win.cpu.ast
             dllpath_gpu_ast = pkgpath+cfg.Paths.spline.win.cuda.ast
-            
+
             if tf.config.list_physical_devices('GPU'):
-                lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)            
-                lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)            
+                lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)
+                lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)
                 lib_gpu_ast = ctypes.CDLL(dllpath_gpu_ast)
             else:
                 usecuda = False
@@ -78,7 +80,7 @@ class localizationlib:
             dllpath_cpu_astM = pkgpath+cfg.Paths.spline.mac.cpu.astM
             dllpath_cpu_4pi = pkgpath+cfg.Paths.spline.mac.cpu.fpi
         elif sys.platform.startswith('linux'):
-            
+
             dllpath_cpu_ast = pkgpath+cfg.Paths.spline.linux.cpu.ast
             dllpath_gpu_ast = pkgpath+cfg.Paths.spline.linux.cuda.ast
             dllpath_cpu_astM = pkgpath+cfg.Paths.spline.linux.cpu.astM
@@ -86,20 +88,20 @@ class localizationlib:
             dllpath_cpu_4pi = pkgpath+cfg.Paths.spline.linux.cpu.fpi
             dllpath_gpu_4pi = pkgpath+cfg.Paths.spline.linux.cuda.fpi
             if tf.config.list_physical_devices('GPU'):
-                lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)            
-                lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)            
+                lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)
+                lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)
                 lib_gpu_ast = ctypes.CDLL(dllpath_gpu_ast)
             else:
                 usecuda = False
 
         try:
-            lib_cpu_astM = ctypes.CDLL(dllpath_cpu_astM)        
-            lib_cpu_4pi = ctypes.CDLL(dllpath_cpu_4pi)        
+            lib_cpu_astM = ctypes.CDLL(dllpath_cpu_astM)
+            lib_cpu_4pi = ctypes.CDLL(dllpath_cpu_4pi)
             lib_cpu_ast = ctypes.CDLL(dllpath_cpu_ast)
         except OSError:
             print('MLE CPU fitting is not available')
-       
-    
+
+
 
         if usecuda:
             self._mleFit_MultiChannel = lib_gpu_astM.GPUmleFit_MultiChannel
@@ -109,8 +111,8 @@ class localizationlib:
             self._mleFit_MultiChannel = lib_cpu_astM.CPUmleFit_MultiChannel
             self._mleFit_4Pi = lib_cpu_4pi.CPUmleFit_LM_4Pi
             self._mleFit = lib_cpu_ast.CPUmleFit_LM
-        
-        
+
+
         self._mleFit_4Pi.argtypes = [
             ctl.ndpointer(np.float32), # data
             ctl.ndpointer(np.int32),   # shared
@@ -178,17 +180,17 @@ class localizationlib:
         normf = np.max(np.median(np.sum(Imd,axis = (-1,-2)),axis=-1))
         Imd = Imd/normf
         pbar = tqdm(total=Nchannel,desc='4/6: calculating spline coefficients',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=start_time)])
-        
-       
-        for i in range(Nchannel):     
-                                      
+
+
+        for i in range(Nchannel):
+
             coeff = psf2cspline_np(Imd[i])
             Iall.append(coeff)
-            
-            pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t    
+
+            pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t
             pbar.update(1)
-            
-        toc = pbar.postfix[1]['time']    
+
+        toc = pbar.postfix[1]['time']
         pbar.close()
         Iall = np.stack(Iall).astype(np.float32)
         data = psf_data.reshape((Nchannel,Nfit,rsz,rsz))
@@ -211,7 +213,7 @@ class localizationlib:
         dTS = dTS.reshape((Nfit,Nchannel*2,Nparam)).astype(np.float32)
         shared = np.array([1,1,1,1,0])
         sharedA = np.repeat(np.expand_dims(shared,axis=0),Nfit,axis = 0).astype(np.int32)
-        
+
         ccz = Iall.shape[-3]//2
         if initz is None:
             Nzm = Imd.shape[-3]
@@ -234,18 +236,18 @@ class localizationlib:
         pbar = tqdm(total=len(zstart),desc='5/6: localization',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=toc)])
 
         for z0 in zstart:
-            
+
             self._mleFit_MultiChannel(data,fittype,sharedA,iterations,Iall,dTS,
                                          varim,z0,datasize,splinesize,Pk,CRLBk,LLk)
             mask = (LLk-LL)>1e-4
             LL[mask] = LLk[mask]
             P[:,mask] = Pk[:,mask]
             CRLB[:,mask] = CRLBk[:,mask]
-            
-            pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t    
+
+            pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t
             pbar.update(1)
 
-        toc = pbar.postfix[1]['time']  
+        toc = pbar.postfix[1]['time']
         pbar.close()
 
         zf = P[2].reshape((Nbead,Nz))
@@ -286,7 +288,7 @@ class localizationlib:
             ax.set_ylim([-0.1,0.1]/np.array([pixelsize_z]))
             plt.show()
 
-        loc_dict = dict(x=xf,y=yf,z=zf)
+        loc_dict = Positions(x=xf, y=yf, z=zf)
 
         return LocalizationResult(
             parameters=P,
@@ -323,20 +325,20 @@ class localizationlib:
         Amd = A_model/normf
         pbar = tqdm(total=Nchannel,desc='4/6: calculating spline coefficients',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=start_time)])
 
-       
+
         IABall = []
-        for i in range(Nchannel):     
-            
+        for i in range(Nchannel):
+
             Ii = Imd[i]
             Ai = 2*np.real(Amd[i])
-            Bi = -2*np.imag(Amd[i]) 
-            IAB = [psf2cspline_np(Ai),psf2cspline_np(Bi),psf2cspline_np(Ii)]  
+            Bi = -2*np.imag(Amd[i])
+            IAB = [psf2cspline_np(Ai),psf2cspline_np(Bi),psf2cspline_np(Ii)]
             IAB = np.stack(IAB)
             IABall.append(IAB)
-            
-            pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t    
+
+            pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t
             pbar.update(1)
-            
+
         toc = pbar.postfix[1]['time']
         pbar.close()
         IABall = np.stack(IABall).astype(np.float32)
@@ -365,7 +367,7 @@ class localizationlib:
 
         phic = np.array([0,0,0,0])
         phiA = np.repeat(np.expand_dims(phic,axis=0),Nfit,axis = 0).astype(np.float32)
-        
+
         ccz = IABall.shape[-3]//2
         if initz is None:
             #Nzm = Imd.shape[-3]
@@ -384,7 +386,7 @@ class localizationlib:
 
         datasize = np.array(np.flip(data.shape)).astype(np.int32)
         splinesize = np.array(np.flip(IABall.shape)).astype(np.int32)
-  
+
         Pk = np.zeros((Nparam+1+(Nchannel-1)*(Nparam-np.sum(shared)),Nfit)).astype(np.float32)
         CRLBk = np.zeros((Nparam+(Nchannel-1)*(Nparam-np.sum(shared)),Nfit)).astype(np.float32)
         LLk = np.zeros((Nfit)).astype(np.float32)
@@ -402,7 +404,7 @@ class localizationlib:
 
         for z0 in zstart:
             for phi0 in phi_start:
-                
+
                 for i in range(Nf):
 
                     nfit = vec[i+1]-vec[i]
@@ -425,10 +427,10 @@ class localizationlib:
                 LL[mask] = LLk[mask]
                 P[:,mask] = Pk[:,mask]
                 CRLB[:,mask] = CRLBk[:,mask]
-                
-                pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t    
+
+                pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t
                 pbar.update(1)
-            
+
         toc = pbar.postfix[1]['time']
         pbar.close()
 
@@ -458,14 +460,14 @@ class localizationlib:
                 zind = range(2,Nz-2,1)
             else:
                 zind = range(0,Nz,1)
-        
-            zdiff = zdiff-np.mean(zdiff[:,zind],axis=1,keepdims=True)        
+
+            zdiff = zdiff-np.mean(zdiff[:,zind],axis=1,keepdims=True)
             phidiff = phidiff-np.mean(phidiff[:,zind],axis=1,keepdims=True)
             msez = np.mean(np.square((np.median(zf-zg,axis=0)-(zf-zg))[:,zind]),axis=1)
-   
+
         else:
             msez = np.array([1.0])
-    
+
         msezRatio =msez/(np.median(msez)+1e-6)
         if plot & (Nz>1):
             fig = plt.figure(figsize=[12,6])
@@ -474,7 +476,7 @@ class localizationlib:
             plt.plot(np.linspace(0,Nz-1,Nz))
             ax = fig.add_subplot(2,2,2)
             plt.plot(phif.transpose(),color=(0.6,0.6,0.6))
-            plt.plot(np.linspace(0,Nz-1,Nz))    
+            plt.plot(np.linspace(0,Nz-1,Nz))
             ax = fig.add_subplot(2,2,3)
             plt.plot((zdiff).transpose(),color=(0.6,0.6,0.6))
             plt.plot(np.median(zdiff,axis=0),color='r')
@@ -488,9 +490,9 @@ class localizationlib:
             ax.set_ylim([-0.01,0.01]/np.array([pixelsize_z]))
             ax.set_title('phi')
             plt.show()
-    
 
-        loc_dict = dict(x=xf,y=yf,z=phif,zast=zf)
+
+        loc_dict = Positions(x=xf, y=yf, z=phif, zast=zf)
         return LocalizationResult(
             parameters=P,
             crlb=CRLB,
@@ -502,7 +504,7 @@ class localizationlib:
         )
 
 
-    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, plot: bool = False, start_time: float = 0) -> LocalizationResult:
+    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, start_time: float = 0) -> LocalizationResult:
         """Perform single-channel astigmatic localization fitting."""
         rsz = psf_data.shape[-1]
         Nbead = psf_data.shape[0]
@@ -517,20 +519,20 @@ class localizationlib:
         normf = np.median(np.sum(Imd,axis = (-1,-2)))
         Imd = Imd/normf
         pbar = tqdm(total=1,desc='4/6: calculating spline coefficients',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=start_time)])
-                  
+
         coeff = psf2cspline_np(Imd)
-                         
-        pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t    
+
+        pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t
         pbar.update(1)
-        toc = pbar.postfix[1]['time']    
+        toc = pbar.postfix[1]['time']
         pbar.close()
-        
+
         coeff = coeff.astype(np.float32)
         data = psf_data.reshape((Nfit,rsz,rsz))
         bxsz = np.min((rsz,20))
         data = data[:,rsz//2-bxsz//2:rsz//2+bxsz//2,rsz//2-bxsz//2:rsz//2+bxsz//2].astype(np.float32)
         data = np.maximum(data,0.0)
-        
+
         ccz = coeff.shape[-3]//2
         if initz is None:
             Nzm = Imd.shape[0]
@@ -552,21 +554,21 @@ class localizationlib:
         P = np.zeros((Nparam+1,Nfit)).astype(np.float32)
         CRLB = np.zeros((Nparam,Nfit)).astype(np.float32)
         LL = np.zeros((Nfit)).astype(np.float32)-1e10
-        
+
         pbar = tqdm(total=len(zstart),desc='5/6: localization',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=toc)])
 
         for z0 in zstart:
-            
+
             self._mleFit(data,fittype,iterations,coeff,varim,z0,datasize,splinesize,Pk,CRLBk,LLk)
             mask = (LLk-LL)>1e-4
             LL[mask] = LLk[mask]
             P[:,mask] = Pk[:,mask]
             CRLB[:,mask] = CRLBk[:,mask]
-           
-            pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t    
+
+            pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t
             pbar.update(1)
 
-        toc = pbar.postfix[1]['time']     
+        toc = pbar.postfix[1]['time']
         pbar.close()
 
 
@@ -577,14 +579,14 @@ class localizationlib:
         zg = np.linspace(0,Nz-1,Nz)
         if Nz>1:
             zf = zf-np.median(zf-zg,axis=1,keepdims=True)
-            zdiff = zf-zg        
-            xf = xf-np.median(xf,axis=1,keepdims=True)        
+            zdiff = zf-zg
+            xf = xf-np.median(xf,axis=1,keepdims=True)
             yf = yf-np.median(yf,axis=1,keepdims=True)
             if Nz>4:
                 zind = range(2,Nz-2,1)
             else:
                 zind = range(0,Nz,1)
-        
+
             zdiff = zdiff-np.mean(zdiff[:,zind],axis=1,keepdims=True)
             msez = np.mean(np.square((np.median(zf-zg,axis=0)-(zf-zg))[:,zind]),axis=1)
         else:
@@ -596,20 +598,7 @@ class localizationlib:
             msezRatio = np.array([1.0])
         else:
             msezRatio =msez/(np.median(msez)+1e-6)
-        if plot & (Nz>1):
-            fig = plt.figure(figsize=[12,6])
-            ax = fig.add_subplot(1,2,1)
-            plt.plot(zf.transpose(),color=(0.6,0.6,0.6))
-            plt.plot(zg)
-            ax.set_title('z')
-            ax = fig.add_subplot(1,2,2)
-            plt.plot((zdiff).transpose(),color=(0.6,0.6,0.6))
-            plt.plot(np.median(zdiff,axis=0),color='r')
-            plt.plot(zg-zg,color='k')
-            ax.set_ylim([-0.1,0.1]/np.array([pixelsize_z]))
-            plt.show()
-
-        loc_dict = dict(x=xf,y=yf,z=zf)
+        loc_dict = Positions(x=xf, y=yf, z=zf)
 
         return LocalizationResult(
             parameters=P,

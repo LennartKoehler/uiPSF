@@ -40,13 +40,15 @@ param.roi.bead_radius = 0.025
 param.batch_size = 30
 param.option.imaging.emission_wavelength = 0.6
 
+# param.iterations = 250 # TESTVALUE
+
 images = L.load_data(param)
 psf_info = L.get_psf_info(param)
 dataobj = L.prep_data(param, images)
 
 # -- RUN --
 for k in range(0, 1):
-        psfobj, fitter, localizer, learning_result, loc_result, toc = L.learn_with_relearn(param, dataobj, psf_info, time=0)
+        psfobj, learning_result, loc_result, toc = L.learn_with_relearn(param, dataobj, psf_info, time=0)
 
 
 # -- SAVE --

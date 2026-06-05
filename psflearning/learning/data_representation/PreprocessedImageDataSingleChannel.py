@@ -5,9 +5,7 @@ import os
 import h5py
 import numpy as np
 import scipy as sp
-import scipy.spatial
 import scipy.special as spf
-from scipy.spatial import distance_matrix
 
 import matplotlib.pyplot as plt
 from .. import imagetools as nip
@@ -42,16 +40,15 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         else:
             raise ValueError("is4pi should be True or False.")
 
-        self.images: Any = None
+        self.images = None
         self.check_and_init_images(images) # check if input is valid
         self.rois = np.array([])
         self.centers = np.array([])
-        self.channels: list = [self]
         self.file_idxs = np.array([])
         self.rois_available = False
         self.min_border_dist = None # needed in cut_new_rois()
-        self.skew_const: Any = None
-        self.zT: Any = None
+        self.skew_const = None
+        self.zT = None
         return
 
     def check_and_init_images(self, images: Any) -> None:
@@ -134,7 +131,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         # in this case only the rois that is not to close to the border is cut
         # but since the other one is not the first one is not filtered out here
         # so it could be possible that there are two beads visible in one roi...
-        dist_matrix = distance_matrix(centers, centers)
+        dist_matrix = sp.spatial.distance_matrix(centers, centers)
         keep_matrix_idxs = np.where((0 == dist_matrix) | (dist_matrix > min_dist))
         unique, counts = np.unique(keep_matrix_idxs[0], return_counts=True)
         keep_idxs = unique[counts == centers.shape[0]]

@@ -43,7 +43,7 @@ Typical workflows
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from omegaconf import DictConfig
@@ -67,6 +67,8 @@ from .learning import PSFLearner, Localizer
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.PSFInterface import PSFInterface
 from .learning.loclib import LocalizationResult
+from .io.param import RunParameters
+from .learning.psf_variables import LocResResult, PSFInfo, PSFResult, ROIsResult
 
 
 class PSFLearningLib:
@@ -94,22 +96,22 @@ class PSFLearningLib:
     # ── Registry ─────────────────────────────────────────────────────
 
     @staticmethod
-    def get_psf_info(param: DictConfig) -> dict:
+    def get_psf_info(param: Union[RunParameters, DictConfig]) -> PSFInfo:
         """Resolve *param* to PSF class, multi-channel class, and loss
         functions.
 
         Returns
         -------
-        dict
-            Keys: ``psf_class``, ``psf_class_multi``, ``loss_fun``,
-            ``loss_fun_multi``.
+        PSFInfo
+            Typed container with ``psf_class``, ``psf_class_multi``,
+            ``loss_fun``, ``loss_fun_multi``.
         """
         return get_psf_info(param)
 
     # ── Reading (delegates to Reader) ────────────────────────────────
 
     def load_data(
-        self, param: DictConfig, frange: Optional[Tuple[int, int]] = None
+        self, param: Union[RunParameters, DictConfig], frange: Optional[Tuple[int, int]] = None
     ) -> np.ndarray:
         """Load raw image stacks from disk.
 
@@ -117,7 +119,7 @@ class PSFLearningLib:
         """
         return self._reader.read_images(param, frange=frange)
 
-    def prep_data(self, param: DictConfig, images: np.ndarray):
+    def prep_data(self, param: Union[RunParameters, DictConfig], images: np.ndarray):
         """Detect beads / localisations and build a data object.
 
         See :meth:`Reader.prep_data`.
@@ -127,7 +129,7 @@ class PSFLearningLib:
     # ── Fitting ──────────────────────────────────────────────────────
 
     @staticmethod
-    def initialize_psf(param: DictConfig, psf_info: dict):
+    def initialize_psf(param: Union[RunParameters, DictConfig], psf_info: PSFInfo):
         """Create a PSF model object.
 
         See :func:`fitting.initialize_psf`.
@@ -136,8 +138,8 @@ class PSFLearningLib:
 
     @staticmethod
     def learn_psf(
-        param: DictConfig, dataobj, psf_info: dict, time: Optional[float] = None
-    ) -> Tuple[PSFInterface, PSFLearner, ZernikePSFResult, Optional[float]]:
+        param: Union[RunParameters, DictConfig], dataobj, psf_info: PSFInfo, time: Optional[float] = None
+    ) -> Tuple[PSFInterface, ZernikePSFResult, Optional[float]]:
         """Run PSF fitting.
 
         Returns
@@ -151,8 +153,8 @@ class PSFLearningLib:
 
     @staticmethod
     def learn_with_relearn(
-        param: DictConfig, dataobj, psf_info: dict, time: Optional[float] = None
-    ) -> Tuple[PSFInterface, PSFLearner, Localizer, ZernikePSFResult, LocalizationResult, Optional[float]]:
+        param: Union[RunParameters, DictConfig], dataobj, psf_info: PSFInfo, time: Optional[float] = None
+    ) -> Tuple[PSFInterface, ZernikePSFResult, LocalizationResult, Optional[float]]:
         """Learn PSF, localize, remove outliers and re-learn.
 
         Returns
@@ -166,7 +168,7 @@ class PSFLearningLib:
 
     @staticmethod
     def localize_psf(
-        learner, res, param: DictConfig, toc: Optional[float] = None
+        learner, res, param: Union[RunParameters, DictConfig], toc: Optional[float] = None
     ) -> tuple:
         """Run localization using a learned PSF.
 
@@ -181,7 +183,7 @@ class PSFLearningLib:
 
     @staticmethod
     def relearn_psf(
-        learner, res, param: DictConfig, toc: Optional[float] = None,
+        learner, res, param: Union[RunParameters, DictConfig], toc: Optional[float] = None,
         threshold: Optional[list] = None,
     ) -> tuple:
         """Re-learn PSF after rejecting outliers, then re-localize.
@@ -197,7 +199,7 @@ class PSFLearningLib:
 
     @staticmethod
     def localize_fd(
-        param: DictConfig, learning_result, fitter, initz=None
+        param: Union[RunParameters, DictConfig], learning_result, fitter, initz=None
     ):
         """Localise in the Fourier domain.
 
@@ -206,7 +208,7 @@ class PSFLearningLib:
         return localize_FD(param, learning_result, fitter, initz=initz)
 
     def iterlearn_psf(
-        self, param: DictConfig, dataobj, time: Optional[float] = None
+        self, param: Union[RunParameters, DictConfig], dataobj, time: Optional[float] = None
     ) -> str:
         """Iterative PSF learning for insitu data.
 
@@ -235,10 +237,9 @@ class PSFLearningLib:
 
     def save_result(
         self,
-        param: DictConfig,
+        param: Union[RunParameters, DictConfig],
         psfobj,
         dataobj,
-        fitter,
         learning_result: list,
         loc_result: list,
         loc_FD=None,
@@ -248,42 +249,42 @@ class PSFLearningLib:
         See :meth:`Writer.save_result`.
         """
         return self._writer.save_result(
-            param, psfobj, dataobj, fitter,
+            param, psfobj, dataobj,
             learning_result, loc_result, loc_FD=loc_FD,
         )
 
     def write_h5(
         self,
-        param: DictConfig,
+        param: Union[RunParameters, DictConfig],
         filename: str,
-        res_dict: dict,
-        locres_dict: dict,
-        rois_dict: dict,
+        res: PSFResult,
+        locres: LocResResult,
+        rois: ROIsResult,
     ) -> None:
-        """Write result dicts to an HDF5 file.
+        """Write result dataclasses to an HDF5 file.
 
         See :meth:`Writer.write_h5`.
         """
         return self._writer.write_h5(
-            param, filename, res_dict, locres_dict, rois_dict
+            param, filename, res, locres, rois
         )
 
     def generate_cspline(
-        self, param: DictConfig, res_dict: dict, psfobj, keyname: str = "I_model"
+        self, param: Union[RunParameters, DictConfig], res: PSFResult, psfobj, keyname: str = "I_model"
     ):
         """Generate cubic-spline coefficients.
 
         See :meth:`Writer.generate_cspline`.
         """
         return self._writer.generate_cspline(
-            param, res_dict, psfobj, keyname=keyname
+            param, res, psfobj, keyname=keyname
         )
 
     # ── Analysis (pure computation) ──────────────────────────────────
 
     @staticmethod
     def genpsf(
-        param: DictConfig, f, psf_info: Optional[dict] = None,
+        param: Union[RunParameters, DictConfig], f, psf_info: Optional[PSFInfo] = None,
         Nz: int = 21, xsz: int = 21, stagepos: float = 1.0,
     ) -> tuple:
         """Generate a PSF model from fitted parameters.
@@ -296,7 +297,7 @@ class PSFLearningLib:
 
     @staticmethod
     def calstrehlratio(
-        param: DictConfig, f, psf_info: Optional[dict] = None, xsz: int = 31
+        param: Union[RunParameters, DictConfig], f, psf_info: Optional[PSFInfo] = None, xsz: int = 31
     ):
         """Compute the Strehl ratio.
 
@@ -308,7 +309,7 @@ class PSFLearningLib:
 
     @staticmethod
     def calfwhm(
-        param: DictConfig, f, psf_info: Optional[dict] = None
+        param: Union[RunParameters, DictConfig], f, psf_info: Optional[PSFInfo] = None
     ) -> tuple:
         """Compute the FWHM.
 

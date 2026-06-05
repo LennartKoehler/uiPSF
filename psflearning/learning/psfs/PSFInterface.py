@@ -141,7 +141,6 @@ class PSFInterface(ABC):
     spherical_terms: Any
     dipole_field: Any
     defocus: Any
-    ind: list
     psftype: str
     imgcenter: Any
     sub_psfs: Any

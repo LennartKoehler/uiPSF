@@ -16,21 +16,30 @@ import tensorflow as tf
 
 import numpy as np
 
+from .psf_variables import (
+    Pupil4PiLossVariables,
+    PupilLossVariables,
+    PupilSMLMLossVariables,
+    Zernike4PiLossVariables,
+    Zernike4PiSMLMLossVariables,
+    ZernikeFDLossVariables,
+    ZernikeFDSMLMLossVariables,
+    ZernikeLossVariables,
+    ZernikeSMLMLossVariables,
+)
+
 
 def mse_real(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss with regularization for Zernike PSF.
-    
-    Variables structure (7 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_magnitude: Zernike magnitude coeffs [n_zernike, 1, 1]
-        [4] zernike_phase: Zernike phase coeffs [n_zernike, 1, 1]
-        [5] sigma: Gaussian blur [2]
-        [6] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`ZernikeLossVariables` or a plain list
+    of tensors (7 elements, see :class:`ZernikeLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = ZernikeLossVariables.from_list(variables)
+
     mydiff = model - data
     mydiff = mydiff[:, 1:-1]
     data = data[:, 1:-1]
@@ -44,10 +53,10 @@ def mse_real(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    zernike_magnitude = variables[3]
-    zernike_phase = variables[4]
-    background = variables[1]
-    intensity = variables[2]
+    zernike_magnitude = variables.zernike_magnitude
+    zernike_phase = variables.zernike_phase
+    background = variables.backgrounds
+    intensity = variables.intensities
 
     gxymean = tf.reduce_mean(tf.abs(zernike_phase))
     s = tf.math.reduce_sum(
@@ -79,21 +88,14 @@ def mse_real(model, data, variables=None, mu=None, w=None):
 def mse_real_4pi(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for 4Pi Zernike PSF.
-    
-    Variables structure (11 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] intensity_phase: Interference phase [n_beads, 1, 1, 1]
-        [4] zernike_magnitude_1: Zernike magnitude arm 1 [n_zernike, 1, 1]
-        [5] zernike_phase_1: Zernike phase arm 1 [n_zernike, 1, 1]
-        [6] zernike_magnitude_2: Zernike magnitude arm 2 [n_zernike, 1, 1]
-        [7] zernike_phase_2: Zernike phase arm 2 [n_zernike, 1, 1]
-        [8] alpha: Interference visibility [1]
-        [9] wavelength: Wavelength [1]
-        [10] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`Zernike4PiLossVariables` or a plain list
+    of tensors (11 elements, see :class:`Zernike4PiLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = Zernike4PiLossVariables.from_list(variables)
+
     mydiff = model - data
     mydiff = mydiff[:, :, 1:-1]
     data = data[:, :, 1:-1]
@@ -103,10 +105,10 @@ def mse_real_4pi(model, data, variables=None, mu=None, w=None):
         tf.math.reduce_max(tf.square(data), axis=(-3, -2, -1))
     ) / data.shape[-3] * 200
 
-    zernike_magnitude_1 = variables[4]
-    background = variables[1]
-    intensity = variables[2]
-    drift_xy = variables[-1]
+    zernike_magnitude_1 = variables.zernike_magnitude_1
+    background = variables.backgrounds
+    intensity = variables.intensities
+    drift_xy = variables.drift_xy
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
 
@@ -116,8 +118,8 @@ def mse_real_4pi(model, data, variables=None, mu=None, w=None):
     )
     fsz = zernike_magnitude_1.shape
 
-    zernike_magnitude_2 = variables[6]
-    zernike_phase_2 = variables[7]
+    zernike_magnitude_2 = variables.zernike_magnitude_2
+    zernike_phase_2 = variables.zernike_phase_2
 
     Areal = zernike_magnitude_2
     Aimg = zernike_phase_2
@@ -196,17 +198,14 @@ def mse_real_All(model, data, loss_func, variables=None, mu=None, w=None, psfnor
 def mse_real_pupil(model, data, variables=None, mu=None, w=None, psfnorm=1.0):
     """
     Mean squared error loss for direct pupil function PSF.
-    
-    Variables structure (7 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] pupil_real: Real part of pupil [n_pupil, 1, 1]
-        [4] pupil_imag: Imaginary part of pupil [n_pupil, 1, 1]
-        [5] sigma: Gaussian blur [2]
-        [6] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`PupilLossVariables` or a plain list
+    of tensors (7 elements, see :class:`PupilLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = PupilLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -218,11 +217,11 @@ def mse_real_pupil(model, data, variables=None, mu=None, w=None, psfnorm=1.0):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    pupil_real = variables[3]
-    pupil_imag = variables[4]
-    background = variables[1]
-    intensity = variables[2]
-    drift_xy = variables[-1]
+    pupil_real = variables.pupil_real
+    pupil_imag = variables.pupil_imag
+    background = variables.backgrounds
+    intensity = variables.intensities
+    drift_xy = variables.drift_xy
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
     Inorm = tf.math.square(tf.math.minimum(psfnorm - 0.97, 0))
@@ -244,20 +243,14 @@ def mse_real_pupil(model, data, variables=None, mu=None, w=None, psfnorm=1.0):
 def mse_pupil_4pi(model, data, variables=None, mu=None, w=None, psfnorm=[1.0, 1.0]):
     """
     Mean squared error loss for 4Pi direct pupil PSF.
-    
-    Variables structure (10 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] pupil_real_1: Real pupil arm 1 [n_pupil, 1, 1]
-        [4] pupil_imag_1: Imaginary pupil arm 1 [n_pupil, 1, 1]
-        [5] pupil_real_2: Real pupil arm 2 [n_pupil, 1, 1]
-        [6] pupil_imag_2: Imaginary pupil arm 2 [n_pupil, 1, 1]
-        [7] alpha: Interference visibility [1]
-        [8] wavelength: Wavelength [1]
-        [9] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`Pupil4PiLossVariables` or a plain list
+    of tensors (10 elements, see :class:`Pupil4PiLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = Pupil4PiLossVariables.from_list(variables)
+
     mydiff = model - data
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
     mse_norm2 = tf.reduce_mean(
@@ -268,15 +261,15 @@ def mse_pupil_4pi(model, data, variables=None, mu=None, w=None, psfnorm=[1.0, 1.
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    pupil_real_1 = variables[3]
-    pupil_imag_1 = variables[4]
-    pupil_real_2 = variables[5]
-    pupil_imag_2 = variables[6]
-    background = variables[1]
-    intensity = variables[2]
-    alpha = variables[7]
-    wavelength = variables[8]
-    drift_xy = variables[-1]
+    pupil_real_1 = variables.pupil_real_1
+    pupil_imag_1 = variables.pupil_imag_1
+    pupil_real_2 = variables.pupil_real_2
+    pupil_imag_2 = variables.pupil_imag_2
+    background = variables.backgrounds
+    intensity = variables.intensities
+    alpha = variables.alpha
+    wavelength = variables.wavelength
+    drift_xy = variables.drift_xy
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
     Inorm = (tf.math.square(tf.math.minimum(psfnorm[0] - 0.97, 0)) +
@@ -305,26 +298,28 @@ def mse_pupil_4pi(model, data, variables=None, mu=None, w=None, psfnorm=[1.0, 1.
 def mse_real_zernike(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for Zernike PSF.
-    
-    Accepts either a ZernikePSFVariables object or a plain list of tensors.
+
+    Accepts either a :class:`ZernikeLossVariables` (or
+    ``ZernikePSFVariables``) object or a plain list of tensors.
     The plain list form is used by the L-BFGS-B optimizer batching loop,
     which passes raw tensors for gradient tracking.
     """
     assert variables is not None and w is not None and mu is not None
     if isinstance(variables, list):
-        # Raw tensor list: use directly (do NOT wrap in LearnablePSFParameters,
-        # as that would create new tf.Variables that break the gradient chain)
-        background = variables[1]
-        intensity = variables[2]
-        zernike_magnitude = variables[3]
-        sigma = variables[5]
-        drift_xy = variables[-1]
-    else:
+        variables = ZernikeLossVariables.from_list(variables)
+
+    if hasattr(variables, 'value'):
         background = variables.backgrounds.value
         intensity = variables.intensities.value
         zernike_magnitude = variables.zernike_magnitude.value
         sigma = variables.sigma.value
         drift_xy = variables.drift_xy.value
+    else:
+        background = variables.backgrounds
+        intensity = variables.intensities
+        zernike_magnitude = variables.zernike_magnitude
+        sigma = variables.sigma
+        drift_xy = variables.drift_xy
 
     mydiff = model - data
 
@@ -352,21 +347,14 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
 def mse_zernike_4pi(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for 4Pi Zernike PSF.
-    
-    Variables structure (11 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] intensity_phase: Interference phase [n_beads, 1, 1, 1]
-        [4] zernike_magnitude_1: Zernike magnitude arm 1 [n_zernike, 1, 1]
-        [5] zernike_phase_1: Zernike phase arm 1 [n_zernike, 1, 1]
-        [6] zernike_magnitude_2: Zernike magnitude arm 2 [n_zernike, 1, 1]
-        [7] zernike_phase_2: Zernike phase arm 2 [n_zernike, 1, 1]
-        [8] alpha: Interference visibility [1]
-        [9] wavelength: Wavelength [1]
-        [10] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`Zernike4PiLossVariables` or a plain list
+    of tensors (11 elements, see :class:`Zernike4PiLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = Zernike4PiLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -378,17 +366,13 @@ def mse_zernike_4pi(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    intensity_phase = variables[3]
-    zernike_magnitude_1 = variables[4]
-    zernike_phase_1 = variables[5]
-    zernike_magnitude_2 = variables[6]
-    zernike_phase_2 = variables[7]
-    alpha = variables[8]
-    wavelength = variables[9]
-    posd = variables[10]
-    drift_xy = variables[-1]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    zernike_magnitude_1 = variables.zernike_magnitude_1
+    zernike_magnitude_2 = variables.zernike_magnitude_2
+    alpha = variables.alpha
+    posd = variables.wavelength
+    drift_xy = variables.drift_xy
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
 
@@ -409,22 +393,14 @@ def mse_zernike_4pi(model, data, variables=None, mu=None, w=None):
 def mse_zernike_4pi_smlm(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for 4Pi SMLM Zernike PSF.
-    
-    Variables structure (12 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] intensity_phase: Interference phase [n_beads, 1, 1, 1]
-        [4] stage_position: Stage position [n_beads, 1, 1, 1]
-        [5] sample_height: Sample height [1]
-        [6] zernike_magnitude_1: Zernike magnitude arm 1 [n_zernike, 1, 1]
-        [7] zernike_phase_1: Zernike phase arm 1 [n_zernike, 1, 1]
-        [8] zernike_magnitude_2: Zernike magnitude arm 2 [n_zernike, 1, 1]
-        [9] zernike_phase_2: Zernike phase arm 2 [n_zernike, 1, 1]
-        [10] alpha: Interference visibility [1]
-        [11] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`Zernike4PiSMLMLossVariables` or a plain
+    list of tensors (12 elements, see :class:`Zernike4PiSMLMLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = Zernike4PiSMLMLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -436,17 +412,14 @@ def mse_zernike_4pi_smlm(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    intensity_phase = variables[3]
-    stage_position = variables[4]
-    sample_height = variables[5]
-    zernike_magnitude_1 = variables[6]
-    zernike_phase_1 = variables[7]
-    zernike_magnitude_2 = variables[8]
-    zernike_phase_2 = variables[9]
-    alpha = variables[10]
-    zpos = variables[0][:, 0, ...]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    stage_position = variables.stage_position
+    sample_height = variables.sample_height
+    zernike_magnitude_1 = variables.zernike_magnitude_1
+    zernike_magnitude_2 = variables.zernike_magnitude_2
+    alpha = variables.alpha
+    zpos = variables.positions[:, 0, ...]
 
     bgmin = tf.reduce_sum(tf.math.square(tf.math.minimum(background, 0)))
     intensitymin = tf.reduce_sum(tf.math.square(tf.math.minimum(intensity, 0)))
@@ -467,16 +440,14 @@ def mse_zernike_4pi_smlm(model, data, variables=None, mu=None, w=None):
 def mse_real_zernike_FD(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for field-dependent Zernike PSF.
-    
-    Variables structure (6 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_map: Per-bead Zernike coeffs [n_beads, n_zernike]
-        [4] sigma: Gaussian blur [2]
-        [5] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`ZernikeFDLossVariables` or a plain list
+    of tensors (6 elements, see :class:`ZernikeFDLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = ZernikeFDLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -488,10 +459,10 @@ def mse_real_zernike_FD(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    drift_xy = variables[-1]
-    zernike_map = variables[3]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    drift_xy = variables.drift_xy
+    zernike_map = variables.zernike_map
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
 
@@ -509,16 +480,14 @@ def mse_real_zernike_FD(model, data, variables=None, mu=None, w=None):
 def mse_real_zernike_IMM(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for IMM (Interference Microscopy Model) Zernike PSF.
-    
-    Variables structure (6 elements):
-        [0] positions: Extended positions [n_beads, 4] = [z, state, y, x]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_map: Per-bead Zernike coeffs [n_beads, n_zernike]
-        [4] sigma: Gaussian blur [2]
-        [5] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`ZernikeFDLossVariables` or a plain list
+    of tensors (6 elements, see :class:`ZernikeFDLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = ZernikeFDLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -530,11 +499,11 @@ def mse_real_zernike_IMM(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    positions = variables[0]
-    drift_xy = variables[-1]
-    zernike_map = variables[3]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    positions = variables.positions
+    drift_xy = variables.drift_xy
+    zernike_map = variables.zernike_map
 
     gxymean = tf.reduce_mean(tf.abs(drift_xy))
 
@@ -553,17 +522,14 @@ def mse_real_zernike_IMM(model, data, variables=None, mu=None, w=None):
 def mse_real_zernike_FD_smlm(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for field-dependent SMLM Zernike PSF.
-    
-    Variables structure (7 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_map: Per-bead Zernike coeffs [n_beads, n_zernike]
-        [4] sigma: Gaussian blur [2]
-        [5] stage_position: Stage position [n_beads, 1, 1, 1]
-        [6] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`ZernikeFDSMLMLossVariables` or a plain
+    list of tensors (7 elements, see :class:`ZernikeFDSMLMLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = ZernikeFDSMLMLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -575,11 +541,11 @@ def mse_real_zernike_FD_smlm(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    stage_position = variables[5]
-    positions = variables[0]
-    zernike_map = variables[3]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    stage_position = variables.stage_position
+    positions = variables.positions
+    zernike_map = variables.zernike_map
 
     zpos = positions[:, 0, ...]
     bgmin = tf.reduce_mean(tf.math.square(tf.math.minimum(background, 0)))
@@ -598,18 +564,14 @@ def mse_real_zernike_FD_smlm(model, data, variables=None, mu=None, w=None):
 def mse_real_zernike_smlm(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for SMLM Zernike PSF.
-    
-    Variables structure (8 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] zernike_magnitude: Zernike magnitude coeffs [n_zernike, 1, 1]
-        [4] zernike_phase: Zernike phase coeffs [n_zernike, 1, 1]
-        [5] stage_position: Stage position [n_beads, 1, 1, 1]
-        [6] sigma: Gaussian blur [2]
-        [7] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`ZernikeSMLMLossVariables` or a plain
+    list of tensors (8 elements, see :class:`ZernikeSMLMLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = ZernikeSMLMLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -621,11 +583,11 @@ def mse_real_zernike_smlm(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    zernike_magnitude = variables[3]
-    stage_position = variables[5]
-    positions = variables[0]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    zernike_magnitude = variables.zernike_magnitude
+    stage_position = variables.stage_position
+    positions = variables.positions
 
     zpos = positions[:, 0, ...]
     bgmin = tf.reduce_mean(tf.math.square(tf.math.minimum(background, 0)))
@@ -644,18 +606,14 @@ def mse_real_zernike_smlm(model, data, variables=None, mu=None, w=None):
 def mse_real_pupil_smlm(model, data, variables=None, mu=None, w=None, psfnorm=1.0):
     """
     Mean squared error loss for SMLM direct pupil PSF.
-    
-    Variables structure (8 elements):
-        [0] positions: Emitter positions [n_beads, 2-4]
-        [1] backgrounds: Background level [n_beads, 1, 1, 1]
-        [2] intensities: Emitter intensity [n_beads, ...]
-        [3] pupil_real: Real part of pupil [n_pupil, 1, 1]
-        [4] pupil_imag: Imaginary part of pupil [n_pupil, 1, 1]
-        [5] stage_position: Stage position [n_beads, 1, 1, 1]
-        [6] sigma: Gaussian blur [2]
-        [7] drift_xy: Lateral drift [n_beads, 2]
+
+    *variables* may be a :class:`PupilSMLMLossVariables` or a plain list
+    of tensors (8 elements, see :class:`PupilSMLMLossVariables`).
     """
     assert variables is not None and w is not None and mu is not None
+    if isinstance(variables, list):
+        variables = PupilSMLMLossVariables.from_list(variables)
+
     mydiff = model - data
 
     mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
@@ -667,12 +625,12 @@ def mse_real_pupil_smlm(model, data, variables=None, mu=None, w=None, psfnorm=1.
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    background = variables[1]
-    intensity = variables[2]
-    pupil_real = variables[3]
-    pupil_imag = variables[4]
-    stage_position = variables[6]
-    positions = variables[0]
+    background = variables.backgrounds
+    intensity = variables.intensities
+    pupil_real = variables.pupil_real
+    pupil_imag = variables.pupil_imag
+    stage_position = variables.stage_position
+    positions = variables.positions
 
     zpos = positions[:, 0, ...]
     bgmin = tf.reduce_mean(tf.math.square(tf.math.minimum(background, 0)))

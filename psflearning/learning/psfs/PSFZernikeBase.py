@@ -144,7 +144,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Complex PSF field (after CZT propagation).
         """
         if self.psftype == "vector":
-            I_res = tf.constant(0.0)
+            I_res = tf.constant(0.0, dtype=tf.complex64)
             for h in self.dipole_field:
                 PupilFunction = pupil * phase_z * h
                 if phase_xy is not None:
@@ -235,8 +235,8 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         """
         ndim = len(image.shape)
         kernel_hwc = [1] * ndim
+        kernel_hwc[-4] = bin_factor
         kernel_hwc[-3] = bin_factor
-        kernel_hwc[-2] = bin_factor
         kernel = np.ones(kernel_hwc, dtype=np.float32)
         return tf.nn.convolution(
             image,
@@ -262,7 +262,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Binned image tensor.
         """
         ndim = len(image.shape)
-        if ndim == 4:
+        if ndim == 5:
             kernel = np.ones((1, bin_factor, bin_factor, 1, 1), dtype=np.float32)
             return tf.nn.convolution(
                 image,

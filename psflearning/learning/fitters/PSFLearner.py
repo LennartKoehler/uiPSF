@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 
+from ..loclib import LocalizationResult
 from .FitterInterface import FitterInterface
 from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from ..psfs.PSFInterface import LearnablePSFParameters, PSFInterface
@@ -31,14 +32,13 @@ class PSFLearner(FitterInterface):
         loss_func_single: Optional[Callable] = None,
         loss_weight: Optional[Any] = None,
     ) -> None:
+
         self.data = data
         self.psf: PSFInterface = psf
+
         self.loss_func = loss_func
-        self.loss_func_single = loss_func_single
         self.optimizer = optimizer
 
-        self.rois: np.ndarray = np.array([])
-        self.forward_images: np.ndarray = np.array([])
         self.mu: float = 1
         self.rate: float = 1.1
         self.loss_weight = loss_weight
@@ -57,27 +57,19 @@ class PSFLearner(FitterInterface):
         """
         if ind is None:
             ind = [0, variables.n_beads]
-        self.psf.ind = ind
         forward_images = self.psf.calc_forward_images(variables)
-        loss = self.loss_func(forward_images, self.rois[ind[0]:ind[1]], variables, mu, self.loss_weight)
+        loss = self.loss_func(forward_images, self.data.rois[ind[0]:ind[1]], variables, mu, self.loss_weight)
         return loss
 
     def learn_psf(
         self,
         variables: ZernikePSFVariables,
         start_time: Optional[float] = None,
-    ) -> Tuple[ZernikePSFResult, float]:
+    ) -> Tuple[ZernikePSFResult, np.ndarray, float]:
         """
         Defines the procedure of the psf learning. Just asks the psf to calculate initial
         values (if not provided), runs the optimization and uses the psf object to do postprocessing.
         """
-
-        _, rois, _, _ = self.data.get_image_data()
-
-        try:
-            self.rois = np.stack(rois)
-        except ValueError:
-            raise RuntimeError("At this point each channel must have same number of rois and allow np.stack.")
 
         pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
 
@@ -85,17 +77,17 @@ class PSFLearner(FitterInterface):
         toc = pbar.postfix[-1]['time']
         pbar.close()
 
-        self.psf.ind = [0, variables.n_beads]
-        self.forward_images = self.psf.calc_forward_images(variables).numpy()
+        # self.psf.ind = [0, variables.n_beads]
+        forward_images = self.psf.calc_forward_images(variables).numpy()
 
         psfResult = self.psf.postprocess(variables)
 
-        return psfResult, toc
+        return psfResult, forward_images, toc
 
     def remove_outliers_single(
         self,
         res: ZernikePSFResult,
-        localizer: Localizer,
+        locres: LocalizationResult,
         threshold: list,
     ) -> Optional[ZernikePSFVariables]:
         """Remove outlier ROIs for single-channel data based on rejection metrics.
@@ -104,9 +96,12 @@ class PSFLearner(FitterInterface):
         Returns the filtered variables if any outliers were removed,
         or *None* if no outliers were found (or all would be removed).
         """
-        metric = localizer.reject_metric
-        minI = localizer.minI
-        mask = self._get_mask(metric, minI, threshold)
+        metric, minI= create_reject_metric(
+            res,
+            locres,
+            psf_modeled,
+            self.data)
+        mask = get_mask(metric, minI, threshold)
         delete_id = np.where(~mask)
         print('outlier id:', str(delete_id[0]))
 
@@ -123,10 +118,40 @@ class PSFLearner(FitterInterface):
         return res.filter_by_mask(mask)
 
 
-    def _get_mask(self, metric, minI, threshold):
-        mask = metric[0] > -1
-        for i, val in enumerate(metric):
-            mask = (val < threshold[i]) & mask
-        mask = (minI > 0) & mask
-        return mask
+def get_mask(metric, minI, threshold):
+    mask = metric[0] > -1
+    for i, val in enumerate(metric):
+        mask = (val < threshold[i]) & mask
+    mask = (minI > 0) & mask
+    return mask
 
+def create_reject_metric(
+    res: ZernikePSFResult,
+    locres: LocalizationResult,
+    psf_modeled: np.ndarray,
+    psf_data: np.ndarray
+) -> Tuple[List[np.ndarray], Any]:
+
+    intensity = np.abs(np.squeeze(res.intensities, axis=(-1, -2)))
+    if res.intensities.dtype == 'complex64':
+        intensityR = intensity
+    else:
+        intensityR = np.real(np.squeeze(res.intensities, axis=(-1, -2)))
+    mydiff = psf_modeled[:, 1:-1] - psf_data[:, 1:-1]
+    mse1 = np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(psf_data, axis=(-3, -2, -1))
+
+    if len(intensity.shape) < 2:
+        avgI = intensity
+        minI = intensityR
+    else:
+        avgI = np.median(intensity, axis=1)
+        minI = np.min(intensityR, axis=1)
+
+    if psf_data.shape[0] == 1:
+        intRatio = np.array([1.0])
+        mseRatio = np.array([1.0])
+    else:
+        intRatio = np.square(avgI - np.median(avgI)) / np.median(avgI) / avgI
+        mseRatio = mse1 / np.median(mse1)
+    msezRatio = locres.mse_z_ratio
+    return [msezRatio, mseRatio, intRatio], minI

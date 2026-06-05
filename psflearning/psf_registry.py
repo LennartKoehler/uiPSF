@@ -10,32 +10,32 @@ corresponding loss functions.
 
 from __future__ import annotations
 
-from typing import Any
-
 from omegaconf import DictConfig
+from typing import Union
 
 from .learning import (
     PSFZernikeBased,
     mse_real_zernike,
 )
+from .learning.psf_variables import PSFInfo
+from .io.param import RunParameters
 
-def get_psf_info(param: DictConfig) -> dict[str, Any]:
+
+def get_psf_info(param: Union[RunParameters, DictConfig]) -> PSFInfo:
 
     """Resolve *param* into the concrete PSF class, multi-channel class,
     loss function, and multi-channel loss function.
 
     Returns
     -------
-    dict
-        Keys: ``psf_class``, ``psf_class_multi``, ``loss_fun``,
-        ``loss_fun_multi``.
+    PSFInfo
+        Typed container with ``psf_class``, ``psf_class_multi``,
+        ``loss_fun``, ``loss_fun_multi``.
     """
 
-
-    return {
-        "psf_class": PSFZernikeBased,
-        "psf_class_multi": None,
-        "loss_fun": mse_real_zernike,
-        "loss_fun_multi": None,
-    }
-
+    return PSFInfo(
+        psf_class=PSFZernikeBased,
+        psf_class_multi=None,
+        loss_fun=mse_real_zernike,
+        loss_fun_multi=None,
+    )

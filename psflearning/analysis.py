@@ -18,12 +18,16 @@ from typing import Optional, Tuple
 import numpy as np
 from dotted_dict import DottedDict
 from omegaconf import DictConfig
+from typing import Union
+
+from .learning.psf_variables import PSFInfo
+from .io.param import RunParameters
 
 
 def genpsf(
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     f,
-    psf_info: dict,
+    psf_info: PSFInfo,
     Nz: int = 21,
     xsz: int = 21,
     stagepos: float = 1.0,
@@ -36,7 +40,7 @@ def genpsf(
         Experiment parameters.
     f : DottedDict
         Fitting result with ``res`` and ``rois`` attributes.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
     Nz : int
         Number of z-slices.
@@ -156,7 +160,7 @@ def _genpsf_multi(psfobj, dataobj, f, p, Nz, stagepos):
 
 
 def calstrehlratio(
-    param: DictConfig, f, psf_info: dict, xsz: int = 31
+    param: Union[RunParameters, DictConfig], f, psf_info: PSFInfo, xsz: int = 31
 ):
     """Compute the Strehl ratio of the fitted PSF.
 
@@ -169,7 +173,7 @@ def calstrehlratio(
         Experiment parameters.
     f : DottedDict
         Fitting result.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
     xsz : int
         Lateral size used for generating the PSF.
@@ -281,7 +285,7 @@ def _strehl_4pi(f):
 
 
 def calfwhm(
-    param: DictConfig, f, psf_info: dict
+    param: Union[RunParameters, DictConfig], f, psf_info: PSFInfo
 ) -> Tuple:
     """Compute the full-width at half-maximum of the fitted PSF.
 
@@ -291,7 +295,7 @@ def calfwhm(
         Experiment parameters.
     f : DottedDict
         Fitting result.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
 
     Returns

@@ -15,7 +15,7 @@ from dotted_dict import DottedDict
 from omegaconf import DictConfig, OmegaConf
 
 from psflearning.learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
-
+from .io.param import RunParameters
 from .dataloader import get_loader
 # from .learning import (
 #     PreprocessedImageDataMultiChannel,
@@ -31,7 +31,7 @@ class Reader:
     # ── Image loading ────────────────────────────────────────────────────
 
     def read_images(
-        self, param: DictConfig, frange: Optional[Tuple[int, int]] = None
+        self, param: Union[RunParameters, DictConfig], frange: Optional[Tuple[int, int]] = None
     ) -> np.ndarray:
         """Load raw image stacks from disk.
 
@@ -68,7 +68,7 @@ class Reader:
 
     # ── Data preprocessing ───────────────────────────────────────────────
 
-    def prep_data(self, param: DictConfig, images: np.ndarray):
+    def prep_data(self, param: Union[RunParameters, DictConfig], images: np.ndarray):
         """Detect beads / localisations in *images* and return a
         :class:`PreprocessedImageData` object.
 
@@ -136,7 +136,7 @@ class Reader:
         psftype: Optional[str] = None,
         channeltype: Optional[str] = None,
         sysfile: Optional[str] = None,
-    ) -> DictConfig:
+    ) -> RunParameters:
         """Combine a base configuration with PSF / channel / system overrides.
 
         Parameters
@@ -153,57 +153,11 @@ class Reader:
 
         Returns
         -------
-        DictConfig
+        RunParameters
             Merged parameters.
         """
-        import os
-
-        this_path = os.path.dirname(os.path.abspath(__file__))
-        pkg_path = os.path.dirname(this_path)
-
-        fparam = OmegaConf.load(
-            pkg_path + "/config/" + basefile + ".yaml"
-        ).Params
-
-        if psftype is not None:
-            psf_param = OmegaConf.load(
-                pkg_path + "/config/psftype/" + psftype + ".yaml"
-            ).Params
-            fparam = _redefine(fparam, psf_param)
-
-        if channeltype is not None:
-            ch_param = OmegaConf.load(
-                pkg_path + "/config/channeltype/" + channeltype + ".yaml"
-            ).Params
-            fparam = _redefine(fparam, ch_param)
-
-        if sysfile is not None:
-            sys_param = OmegaConf.load(
-                pkg_path + "/config/systemtype/" + sysfile + ".yaml"
-            ).Params
-            fparam = _redefine(fparam, sys_param)
-
-        if psftype == "zernike" and channeltype == "4pi":
-            fparam.PSFtype = "zernike"
-
-        if "insitu" in (psftype or ""):
-            fparam.roi.gauss_sigma[-1] = max(
-                [4, fparam.roi.gauss_sigma[-1]]
-            )
-            fparam.roi.gauss_sigma[-2] = max(
-                [4, fparam.roi.gauss_sigma[-2]]
-            )
-            fparam.roi.max_kernel[-1] = max(
-                [5, fparam.roi.max_kernel[-1]]
-            )
-            fparam.roi.max_kernel[-2] = max(
-                [5, fparam.roi.max_kernel[-2]]
-            )
-
-        if "FD" in (psftype or ""):
-            fparam.option.model.bin = 1
-
-        return fparam
+        from .io.param import combine as _combine
+        return _combine(basefile, psftype=psftype, channeltype=channeltype, sysfile=sysfile)
 
     # ── Result loading ───────────────────────────────────────────────────
 
@@ -237,7 +191,7 @@ class Reader:
 
     @staticmethod
     def load_initial_pupil(
-        param: DictConfig, psfobj, dataobj
+        param: Union[RunParameters, DictConfig], psfobj, dataobj
     ) -> None:
         """Load initial pupil / PSF / Zernike coefficients from an HDF5
         file into *psfobj* in-place.
@@ -271,7 +225,7 @@ class Reader:
 
     @staticmethod
     def _rearrange_axes(
-        images_all: np.ndarray, param: DictConfig
+        images_all: np.ndarray, param: Union[RunParameters, DictConfig]
     ) -> np.ndarray:
         """Transpose *images_all* so the leading axis matches
         *channeltype*."""
@@ -294,7 +248,7 @@ class Reader:
 
     @staticmethod
     def _reshape_insitu(
-        images: np.ndarray, param: DictConfig
+        images: np.ndarray, param: Union[RunParameters, DictConfig]
     ) -> np.ndarray:
         """Flatten the z-position dimension for insitu (SMLM) data."""
         if "insitu" not in param.PSFtype:
@@ -313,7 +267,7 @@ class Reader:
         )
 
     @staticmethod
-    def _swap_xy(images: np.ndarray, param: DictConfig) -> np.ndarray:
+    def _swap_xy(images: np.ndarray, param: Union[RunParameters, DictConfig]) -> np.ndarray:
         """Optionally swap the x and y axes."""
         if not param.swapxy:
             return images
@@ -327,7 +281,7 @@ class Reader:
 
     @staticmethod
     def _flip_if_reverse(
-        images: np.ndarray, param: DictConfig
+        images: np.ndarray, param: Union[RunParameters, DictConfig]
     ) -> np.ndarray:
         """Flip the z-axis when the stage moves in reverse for bead data."""
         if param.stage_mov_dir == "reverse" and param.datatype == "bead":
@@ -346,7 +300,7 @@ class Reader:
         return np.swapaxes(ims, 0, -3)
 
     @staticmethod
-    def _create_dataobj(images: np.ndarray, param: DictConfig):
+    def _create_dataobj(images: np.ndarray, param: Union[RunParameters, DictConfig]):
         """Instantiate the correct :class:`PreprocessedImageData`
         subclass."""
         channeltype = param.channeltype
@@ -391,7 +345,7 @@ class Reader:
 # ── Module-level helpers ─────────────────────────────────────────────────
 
 
-def _reorder_ref_channel(images: np.ndarray, param: DictConfig) -> np.ndarray:
+def _reorder_ref_channel(images: np.ndarray, param: Union[RunParameters, DictConfig]) -> np.ndarray:
     """Swap the first channel with *ref_channel* so the reference comes
     first."""
     ref = param.ref_channel

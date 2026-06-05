@@ -17,6 +17,9 @@ from matplotlib import gridspec
 import numpy as np
 from omegaconf import DictConfig
 
+from .learning.psf_variables import ReportResult
+from .io.param import RunParameters
+
 
 def save_figs(
     figs: Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]],
@@ -69,7 +72,7 @@ class Plotter:
     # ── Learned parameters ───────────────────────────────────────────────
 
     def plot_learned_params(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> matplotlib.figure.Figure:
         """Plot positions, photons, background, and drift for bead data.
 
@@ -152,7 +155,7 @@ class Plotter:
         return fig
 
     def plot_learned_params_insitu(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> matplotlib.figure.Figure:
         """Plot positions, photons, and background for insitu (SMLM) data.
 
@@ -229,7 +232,7 @@ class Plotter:
     # ── Pupil ────────────────────────────────────────────────────────────
 
     def plot_pupil(
-        self, fitter, param: DictConfig, index: Optional[int] = None
+        self, fitter, param: Union[RunParameters, DictConfig], index: Optional[int] = None
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Plot pupil magnitude and phase.
 
@@ -353,7 +356,7 @@ class Plotter:
     # ── Zernike ──────────────────────────────────────────────────────────
 
     def plot_zernike(
-        self, fitter, param: DictConfig, index: Optional[int] = None
+        self, fitter, param: Union[RunParameters, DictConfig], index: Optional[int] = None
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Plot Zernike coefficients and reconstructed pupil.
 
@@ -372,13 +375,6 @@ class Plotter:
         """
         if param.channeltype == "single":
             return self._plot_zernike_single(fitter, index)
-
-        if param.channeltype == "multi":
-            return self._plot_zernike_multi(fitter, index)
-
-        if param.channeltype == "4pi":
-            return self._plot_zernike_4pi(fitter)
-
         return plt.figure()
 
     @staticmethod
@@ -716,7 +712,7 @@ class Plotter:
     # ── Zernike map ──────────────────────────────────────────────────────
 
     def plot_zernike_map(
-        self, fitter, param: DictConfig, index: Optional[list] = None
+        self, fitter, param: Union[RunParameters, DictConfig], index: Optional[list] = None
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Plot spatially-resolved Zernike coefficient maps.
 
@@ -762,7 +758,7 @@ class Plotter:
     # ── PSF vs data ──────────────────────────────────────────────────────
 
     def plot_psf_vs_data(
-        self, fitter, param: DictConfig, index: int
+        self, fitter, param: Union[RunParameters, DictConfig], index: int
     ) -> matplotlib.figure.Figure:
         """Compare measured PSF data with the fitted model for bead data.
 
@@ -819,7 +815,7 @@ class Plotter:
         return fig_pos
 
     def plot_psf_vs_data_insitu(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Compare measured PSF data with the fitted model for insitu data.
 
@@ -873,7 +869,7 @@ class Plotter:
     # ── Localization ─────────────────────────────────────────────────────
 
     def plot_localization(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Plot localisation bias curves.
 
@@ -974,7 +970,7 @@ class Plotter:
     # ── PSF display ──────────────────────────────────────────────────────
 
     def plot_psf(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
         """Display the learned PSF model.
 
@@ -1006,7 +1002,7 @@ class Plotter:
     # ── Coordinates ──────────────────────────────────────────────────────
 
     def plot_coordinates(
-        self, fitter, param: DictConfig
+        self, fitter, param: Union[RunParameters, DictConfig]
     ) -> matplotlib.figure.Figure:
         """Plot bead / emitter coordinates on the FOV.
 
@@ -1065,7 +1061,7 @@ class Plotter:
         index: int = 0,
         fmt: str = "png",
         dpi: int = 150,
-    ) -> Dict[str, List[str]]:
+    ) -> ReportResult:
         """Generate all standard plots and save them to *output_dir*.
 
         Parameters
@@ -1085,34 +1081,42 @@ class Plotter:
 
         Returns
         -------
-        dict
-            Mapping of plot name → list of saved file paths.
+        ReportResult
+            Saved file paths for each plot category.
         """
-        saved: Dict[str, List[str]] = {}
+        zernike_paths = None
+        pupil_paths = None
 
         fig = self.plot_psf_vs_data(f, p, index=index)
-        saved["psf_vs_data"] = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
+        psf_vs_data_paths = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
 
         fig = self.plot_localization(f, p)
-        saved["localization"] = save_figs(fig, output_dir, "localization", fmt, dpi)
+        localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
 
         try:
             figs = self.plot_zernike(f, p)
-            saved["zernike"] = save_figs(figs, output_dir, "zernike", fmt, dpi)
+            zernike_paths = save_figs(figs, output_dir, "zernike", fmt, dpi)
         except Exception:
             try:
                 figs = self.plot_pupil(f, p)
-                saved["pupil"] = save_figs(figs, output_dir, "pupil", fmt, dpi)
+                pupil_paths = save_figs(figs, output_dir, "pupil", fmt, dpi)
             except Exception:
                 print("no pupil / zernike plot available")
 
         fig = self.plot_learned_params(f, p)
-        saved["learned_params"] = save_figs(fig, output_dir, "learned_params", fmt, dpi)
+        learned_params_paths = save_figs(fig, output_dir, "learned_params", fmt, dpi)
 
         fig = self.plot_coordinates(f, p)
-        saved["coordinates"] = save_figs(fig, output_dir, "coordinates", fmt, dpi)
+        coordinates_paths = save_figs(fig, output_dir, "coordinates", fmt, dpi)
 
-        return saved
+        return ReportResult(
+            psf_vs_data=psf_vs_data_paths,
+            localization=localization_paths,
+            zernike=zernike_paths,
+            pupil=pupil_paths,
+            learned_params=learned_params_paths,
+            coordinates=coordinates_paths,
+        )
 
     # ── Strehl ratio ─────────────────────────────────────────────────────
 
@@ -1142,7 +1146,7 @@ class Plotter:
 
     def plot_fwhm(
         self,
-        param: DictConfig,
+        param: Union[RunParameters, DictConfig],
         fwhmx: np.ndarray,
         fwhmy: np.ndarray,
         fwhmz: np.ndarray,
@@ -1169,7 +1173,7 @@ class Plotter:
 
     @staticmethod
     def _plot_fwhm_single(
-        param: DictConfig,
+        param: Union[RunParameters, DictConfig],
         I_model: np.ndarray,
         fwhmx: np.ndarray,
         fwhmy: np.ndarray,
@@ -1212,7 +1216,7 @@ class Plotter:
 
     @staticmethod
     def _plot_fwhm_simple(
-        param: DictConfig,
+        param: Union[RunParameters, DictConfig],
         fwhmx: np.ndarray,
         fwhmy: np.ndarray,
         fwhmz: np.ndarray,
@@ -1338,7 +1342,7 @@ def _psf_display(
 
 
 def _plot_loc_bias(
-    loc, param: DictConfig
+    loc, param: Union[RunParameters, DictConfig]
 ) -> matplotlib.figure.Figure:
     """Plot localisation bias in x, y, and z."""
     Nz = loc.z.shape[1]

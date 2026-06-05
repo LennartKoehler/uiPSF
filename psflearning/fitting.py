@@ -10,7 +10,7 @@ L-BFGS-B optimiser, and optional iterative re-learning for SMLM data.
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 
@@ -18,18 +18,21 @@ from .reader import Reader
 from omegaconf import DictConfig
 
 from .learning import PSFLearner, Localizer, L_BFGS_B, LocalizationResult
+from .learning.psf_variables import PSFInfo
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.PSFInterface import LearnablePSFParameters, PSFInterface
+from .learning.loclib import localizationlib
+from .io.param import RunParameters
 
 
-def initialize_psf(param: DictConfig, psf_info: dict):
+def initialize_psf(param: Union[RunParameters, DictConfig], psf_info: PSFInfo):
     """Create and return a PSF model object from *psf_info*.
 
     Parameters
     ----------
     param : DictConfig
         Experiment parameters.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
 
     Returns
@@ -37,8 +40,8 @@ def initialize_psf(param: DictConfig, psf_info: dict):
     PSFInterface
         Initialised PSF model (single- or multi-channel).
     """
-    psf_class = psf_info["psf_class"]
-    psf_class_multi = psf_info["psf_class_multi"]
+    psf_class = psf_info.psf_class
+    psf_class_multi = psf_info.psf_class_multi
     is_vector = "vector" in param.PSFtype
 
     if psf_class_multi is None:
@@ -58,14 +61,14 @@ def initialize_psf(param: DictConfig, psf_info: dict):
 
 
 def create_learner(
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     dataobj,
     psfobj,
-    psf_info: dict,
+    psf_info: PSFInfo,
 ) -> PSFLearner:
     """Create a PSFLearner instance with configured optimizer and loss functions."""
-    lossfun = psf_info["loss_fun"]
-    lossfunmulti = psf_info["loss_fun_multi"]
+    lossfun = psf_info.loss_fun
+    lossfunmulti = psf_info.loss_fun_multi
     w = list(param.loss_weight.values())
 
     optimizer = L_BFGS_B(maxiter=param.iteration, batch_size=param.batch_size)
@@ -80,12 +83,12 @@ def create_learner(
 
 
 def learn_psf(
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     dataobj,
-    psf_info: dict,
+    psf_info: PSFInfo,
     time: Optional[float] = None,
     do_voxel_refit: bool = True,
-) -> Tuple[PSFInterface, PSFLearner, ZernikePSFResult, Optional[float]]:
+) -> Tuple[PSFInterface, ZernikePSFResult, PSFLearner, np.ndarray, Optional[float]]:
     """Run the PSF fitting optimisation.
 
     Parameters
@@ -94,7 +97,7 @@ def learn_psf(
         Experiment parameters.
     dataobj : PreprocessedImageData
         Prepared data object with extracted ROIs.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
     time : float, optional
         Start-time stamp for progress reporting.
@@ -113,8 +116,8 @@ def learn_psf(
 
     _, _, centers, _ = dataobj.get_image_data()
 
-    variables, start_time = learner.psf.calc_initials(learner.data)
-    res, toc = learner.learn_psf(variables, start_time=start_time)
+    variables, time  = learner.psf.calc_initials(learner.data)
+    res, forward_images, toc = learner.learn_psf(variables, start_time=time)
 
     if do_voxel_refit and param.PSFtype == "voxel":
         res, toc = _refit_voxel(
@@ -122,7 +125,7 @@ def learn_psf(
             param.roi.roi_size, time,
         )
 
-    return psfobj, learner, res, toc
+    return psfobj, res, learner, forward_images, time
 
 
 def create_localizer(learner: PSFLearner) -> Localizer:
@@ -138,9 +141,9 @@ def create_localizer(learner: PSFLearner) -> Localizer:
 def localize(
     learner: PSFLearner,
     res: ZernikePSFResult,
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     toc: Optional[float] = None,
-) -> Tuple[Localizer, LocalizationResult, Optional[float]]:
+) -> Tuple[LocalizationResult, Optional[float]]:
     """Perform localization using the learned PSF.
 
     Pure localization -- no relearning.  For non-insitu PSF types the
@@ -163,32 +166,20 @@ def localize(
     tuple of (Localizer, list, float)
         ``(localizer, locres, toc)``
     """
-    localizer = create_localizer(learner)
-    channeltype = param.channeltype
+    dll = localizationlib(usecuda=param.usecuda)
+    locres = dll.loc_ast(res, learner.psf, learner.data.pixelsize_z, initz=None, start_time=toc)
+    toc = locres.toc
 
-    if "insitu" in param.PSFtype:
-        locres = localizer.localize_smlm(
-            res, channeltype, plot=param.plotall,
-        )
-    else:
-        locres = localizer.localize(
-            res, channeltype,
-            usecuda=param.usecuda,
-            plot=param.plotall,
-            start_time=toc,
-        )
-        toc = locres.toc
-
-    return localizer, locres, toc
+    return locres, toc
 
 
 def relearn(
     learner: PSFLearner,
     res: ZernikePSFResult,
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     toc: Optional[float] = None,
     threshold: Optional[list] = None,
-) -> Tuple[Localizer, ZernikePSFResult, LocalizationResult, Optional[float]]:
+) -> Tuple[ZernikePSFResult, LocalizationResult, Optional[float]]:
     """Remove outliers, re-learn PSF, then re-localize.
 
     For non-insitu types: localize (to compute rejection metrics) ->
@@ -216,37 +207,15 @@ def relearn(
     """
     if threshold is None:
         threshold = list(param.rej_threshold.values())
-    channeltype = param.channeltype
 
-    if "insitu" in param.PSFtype:
-        localizer = create_localizer(learner)
-        localizer.rois = learner.rois
-        localizer.forward_images = learner.forward_images
-        locres = localizer.localize_smlm(
-            res, channeltype, plot=param.plotall,
-        )
-    else:
-        localizer, locres, toc = localize(learner, res, param, toc=toc)
+    locres, toc = localize(learner, res, param, toc=toc)
 
-        if channeltype == 'single':
-            filtered_vars = learner.remove_outliers_single(res, localizer, threshold)
-        else:
-            raise NotImplementedError(
-                f"remove_outliers for channeltype={channeltype!r} is not yet implemented"
-            )
-        if filtered_vars is not None:
-            res, toc = learner.learn_psf(filtered_vars, start_time=toc)
-            localizer.rois = learner.rois
-            localizer.forward_images = learner.forward_images
-            locres = localizer.localize(
-                res, channeltype,
-                usecuda=param.usecuda,
-                plot=param.plotall,
-                start_time=toc,
-            )
-            toc = locres.toc
+    filtered_vars = learner.remove_outliers_single(res, locres, threshold)
+    if filtered_vars is not None:
+        res, toc = learner.learn_psf(filtered_vars, start_time=toc)
+        locres, toc = localize(learner, res, param, toc=toc)
 
-    return localizer, res, locres, toc
+    return res, locres, toc
 
 
 def _refit_voxel(
@@ -289,7 +258,7 @@ def _refit_voxel(
 
 
 def localize_FD(
-    param: DictConfig, learning_result, learner, initz=None
+    param: Union[RunParameters, DictConfig], learning_result, learner, initz=None
 ):
     """Localise in the Fourier domain.
 
@@ -321,7 +290,7 @@ def iterlearn_psf(
     save_result_fn: Callable,
     load_initial_pupil_fn: Callable,
     get_psf_info_fn: Callable,
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     dataobj,
     time: Optional[float] = None,
 ) -> str:
@@ -392,22 +361,23 @@ def _update_stage_pos(psfobj, learning_result, dataobj, param):
     res = psfobj.res2dict(learning_result)
 
     if channeltype == "single":
-        param.option.insitu.stage_pos = float(res["stagepos"])
+        if "stagepos" in res:
+            param.option.insitu.stage_pos = float(res["stagepos"])
     else:
         try:
-            param.option.insitu.stage_pos = float(
-                res["channel0"]["stagepos"]
-            )
+            ch0 = res.get("channel0")
+            if ch0 is not None:
+                param.option.insitu.stage_pos = float(ch0["stagepos"])
         except (KeyError, TypeError):
             pass
 
 
 def learn_with_relearn(
-    param: DictConfig,
+    param: Union[RunParameters, DictConfig],
     dataobj,
-    psf_info: dict,
+    psf_info: PSFInfo,
     time: Optional[float] = None,
-) -> Tuple[PSFInterface, PSFLearner, Localizer, ZernikePSFResult, LocalizationResult, Optional[float]]:
+) -> Tuple[PSFInterface, ZernikePSFResult, LocalizationResult, Optional[float]]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -422,7 +392,7 @@ def learn_with_relearn(
         Experiment parameters.
     dataobj : PreprocessedImageData
         Prepared data object with extracted ROIs.
-    psf_info : dict
+    psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
     time : float, optional
         Start-time stamp for progress reporting.
@@ -432,13 +402,13 @@ def learn_with_relearn(
     tuple of (PSFInterface, PSFLearner, Localizer, ZernikePSFResult, LocalizationResult)
         ``(psfobj, learner, localizer, learning_result, loc_result)``
     """
-    psfobj, learner, res, toc = learn_psf(param, dataobj, psf_info, time=time)
+    psfobj, res, learner, forward_images, toc = learn_psf(param, dataobj, psf_info, time=time)
 
     _, _, _, file_idxs = learner.data.get_image_data()
 
     if len(file_idxs) > 1:
-        localizer, res, locres, toc = relearn(learner, res, param, toc=toc)
+        res, locres, toc = relearn(learner, res, param, toc=toc)
     else:
-        localizer, locres, toc = localize(learner, res, param, toc=toc)
+        locres, toc = localize(learner, res, param, toc=toc)
 
-    return psfobj, learner, localizer, res, locres, toc
+    return psfobj, res, locres, toc

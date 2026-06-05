@@ -11,6 +11,7 @@ from .PSFZernikeBase import PSFZernikeBase
 from .PSFInterface import LearnableParameter, LearnablePSFParameters, ParameterScope
 from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from ..loss_functions import mse_real_zernike
+from ..psf_variables import OptimizationWeights, PSFResult
 
 
 @dataclass
@@ -151,7 +152,7 @@ class PSFZernikeBased(PSFZernikeBase):
         self.default_loss_func = mse_real_zernike
         self.psftype = 'scalar'
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: Any = None) -> tuple[ZernikePSFVariables, Any]:
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float) -> tuple[ZernikePSFVariables, Any]:
         """
         Provides initial values for the optimizable variables for the fitter class.
         """
@@ -188,13 +189,13 @@ class PSFZernikeBased(PSFZernikeBase):
         bg_median = np.median(init_backgrounds)
         weight_intensity = np.lib.scimath.sqrt(np.median(init_intensities))
 
-        self.weight = {
-            "intensity": weight_intensity * 100,
-            "background": bg_median,
-            "drift": 1 / weight_intensity * 40,
-            "zernikeMagnitude": 0.5 / weight_intensity * 40,
-            "zernikePhase": 0.5 / weight_intensity * 40,
-        }
+        self.weight = OptimizationWeights(
+            intensity=weight_intensity * 100,
+            background=bg_median,
+            drift=1 / weight_intensity * 40,
+            zernike_magnitude=0.5 / weight_intensity * 40,
+            zernike_phase=0.5 / weight_intensity * 40,
+        )
 
         sigma = np.ones((2,)) * self.options.model.blur_sigma * np.pi
         self.init_sigma = sigma
@@ -202,21 +203,21 @@ class PSFZernikeBased(PSFZernikeBase):
         init_zernike_coeff_magnitude = np.zeros((self.Zk.shape[0], 1, 1))
         init_zernike_coeff_phase = np.zeros((self.Zk.shape[0], 1, 1))
 
-        init_zernike_coeff_magnitude[0, 0, 0] = 1 / self.weight["zernikePhase"]
+        init_zernike_coeff_magnitude[0, 0, 0] = 1 / self.weight.zernike_magnitude
 
         init_backgrounds = (
             np.ones((n_beads, 1, 1, 1), dtype=np.float32)
             * np.median(init_backgrounds, axis=0, keepdims=True)
-            / self.weight["background"]
+            / self.weight.background
         )
         init_drift_xy = np.zeros((n_beads, 2), dtype=np.float32)
         init_intensity_grid = np.ones((n_beads, n_z_slices, 1, 1), dtype=np.float32) * init_intensities
 
 
         if options.model.var_photon:
-            init_intensity = init_intensity_grid / self.weight["intensity"]
+            init_intensity = init_intensity_grid / self.weight.intensity
         else:
-            init_intensity = init_intensities / self.weight["intensity"]
+            init_intensity = init_intensities / self.weight.intensity
 
         return ZernikePSFVariables(
             init_positions.astype(np.float32),
@@ -259,7 +260,7 @@ class PSFZernikeBased(PSFZernikeBase):
         else:
             pupil = self.compute_pupil_from_zernike(
                 zernike_coeff_magnitude, zernike_coeff_phase,
-                self.weight["zernikeMagnitude"], self.weight["zernikePhase"],
+                self.weight.zernike_magnitude, self.weight.zernike_phase,
             )
 
         positions = tf.complex(tf.reshape(positions, positions.shape + (1, 1, 1)), 0.0)
@@ -286,11 +287,11 @@ class PSFZernikeBased(PSFZernikeBase):
         psf_fit = self.trim_z_padding(psf_fit)
 
         if self.options.model.estimate_drift:
-            drift_xy = drift_xy * self.weight["drift"]
+            drift_xy = drift_xy * self.weight.drift
             psf_shifted = self.applyDrift(psf_fit, drift_xy)
-            forward_images = psf_shifted * intensities * self.weight["intensity"] + backgrounds * self.weight["background"]
+            forward_images = psf_shifted * intensities * self.weight.intensity + backgrounds * self.weight.background
         else:
-            forward_images = psf_fit * intensities * self.weight["intensity"] + backgrounds * self.weight["background"]
+            forward_images = psf_fit * intensities * self.weight.intensity + backgrounds * self.weight.background
 
         return forward_images
 
@@ -346,8 +347,8 @@ class PSFZernikeBased(PSFZernikeBase):
         drift_xy = variables.drift_xy.numpy()
         z_center = (self.Zrange.shape[-3] - 1) // 2
 
-        zernike_coeff_magnitude = zernike_coeff_magnitude * self.weight["zernikeMagnitude"]
-        zernike_coeff_phase = zernike_coeff_phase * self.weight["zernikePhase"]
+        zernike_coeff_magnitude = zernike_coeff_magnitude * self.weight.zernike_magnitude
+        zernike_coeff_phase = zernike_coeff_phase * self.weight.zernike_phase
 
         bin_factor = self.options.model.bin
         positions[:, 1:] = positions[:, 1:] / bin_factor
@@ -387,29 +388,29 @@ class PSFZernikeBased(PSFZernikeBase):
 
         return ZernikePSFResult(
             positions=global_positions.astype(np.float32),
-            backgrounds=backgrounds * self.weight["background"],
-            intensities=intensities * self.weight["intensity"],
+            backgrounds=backgrounds * self.weight.background,
+            intensities=intensities * self.weight.intensity,
             model_bead=psf_model_bead,
             model=psf_model,
             pupil=np.complex64(pupil),
             zernike_magnitude=zernike_coeff_magnitude,
             zernike_phase=zernike_coeff_phase,
             sigma=sigma,
-            drift_xy=drift_xy * self.weight["drift"],
+            drift_xy=drift_xy * self.weight.drift,
             model_reversed=np.flip(psf_model, axis=-3),
             _variables=variables,
         )
 
-    def res2dict(self, res: ZernikePSFResult) -> dict[str, Any]:
+    def res2dict(self, res: ZernikePSFResult) -> PSFResult:
         assert self.data is not None
-        res_dict = dict(
+        return PSFResult(
             pos=res.positions,
             bg=np.squeeze(res.backgrounds),
             intensity=np.squeeze(res.intensities),
             I_model_bead=res.model_bead,
             I_model=res.model,
             pupil=res.pupil,
-            zernike_coeff=np.squeeze(res.zernike_magnitude),
+            zernike_coeff=np.array([np.squeeze(res.zernike_magnitude), np.squeeze(res.zernike_phase)]),
             sigma=np.squeeze(res.sigma) / np.pi,
             drift_rate=res.drift_xy,
             I_model_reverse=res.model_reversed,
@@ -419,6 +420,4 @@ class PSFZernikeBased(PSFZernikeBase):
             cor_all=self.data.centers_all,
             cor=self.data.centers,
         )
-
-        return res_dict
 

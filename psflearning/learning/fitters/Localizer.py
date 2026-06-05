@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from ..psfs.PSFInterface import PSFInterface
 from ..loclib import localizationlib
+from ..psf_variables import Positions
 from typing import Any, Dict, List, Optional
 
 
@@ -162,7 +163,7 @@ class Localizer:
         usecuda: bool = True,
         initz: Optional[Any] = None,
         plot: bool = True,
-    ) -> Dict[str, np.ndarray]:
+    ) -> Positions:
         """Localize emitters frame-by-frame and compute z-bias drift over the acquisition."""
         I_model_all = self.forward_images
         psf_data = self.rois
@@ -186,9 +187,9 @@ class Localizer:
                 T = res.drift_xy
                 loci = dll.loc_ast_dual(psf_data[:, i:i + 1], I_model_all[:, i], pz, cor[:, i:i + 1], imgcenter, T, initz=initz, start_time=0)
 
-            x.append(np.squeeze(loci.positions['x']))
-            y.append(np.squeeze(loci.positions['y']))
-            z.append(np.squeeze(loci.positions['z']))
+            x.append(np.squeeze(loci.positions.x))
+            y.append(np.squeeze(loci.positions.y))
+            z.append(np.squeeze(loci.positions.z))
 
         xf = np.stack(x)
         yf = np.stack(y)
@@ -220,7 +221,7 @@ class Localizer:
             ax.set_ylabel('z bias')
             ax.set_ylim([-0.1, 0.1] / np.array(pz))
 
-        loc_FD = dict(x=xf, y=yf, z=zf)
+        loc_FD = Positions(x=xf, y=yf, z=zf)
         return loc_FD
 
     @property
