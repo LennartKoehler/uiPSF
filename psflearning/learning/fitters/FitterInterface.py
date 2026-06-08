@@ -7,28 +7,38 @@ import numpy as np
 
 class FitterInterface:
     """
-    Interface that ensures consistency and compatability between all old and new implementations of data classes, fitters and psfs.
-    Classes implementing this interafce define the fitting procedure. They combine image data and a psf model to do this (and also optimizer???).
-    For example, the procedure for fitting a psf for a single-channel experiment can be very different from one for a multi-channel experiment.
+    Interface for PSF fitting procedures.
+
+    Classes implementing this interface define the fitting procedure. They
+    combine an optimizer and a loss function to learn PSF parameters.
+    Data and PSF models are passed explicitly to method calls, not stored
+    as instance state.
     """
 
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __objective(self, variables: list) -> list:
+    def learn_psf(self, data, psf, variables, start_time=None):
         """
-        Defines the objective that is optimized. In general, calculates the loss from forward images and real images
-        and return the loss and its graient.
-        """
-        raise NotImplementedError("You need to implement a 'objective' method in your fitter class.")
+        Run the PSF learning optimization.
 
-    @abstractmethod
-    def learn_psf(self, variables: list | None = None) -> list:
+        Parameters
+        ----------
+        data : PreprocessedImageData
+            Image data with extracted ROIs.
+        psf : PSFInterface
+            PSF model for forward image computation.
+        variables : LearnablePSFParameters
+            Initial learnable variables.
+        start_time : float, optional
+            Start-time stamp for progress reporting.
+
+        Returns
+        -------
+        tuple
+            ``(psfResult, forward_images, toc)``
         """
-        Is called by the user and defines the procedure of the psf learning.
-        Returns a list containing the results, e.g., a psf object, the final postioins, intensities and backgrounds.
-        """
-        raise NotImplementedError("You need to implement a 'learn_psf' method in your psf class.")
+        raise NotImplementedError("You need to implement a 'learn_psf' method in your fitter class.")
 
     def save(self, filename: str) -> None:
         """

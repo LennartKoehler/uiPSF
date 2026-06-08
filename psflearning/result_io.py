@@ -20,7 +20,7 @@ from .learning.psf_variables import LocResResult, Positions, PSFResult, ROIsResu
 
 # ── Cubic-spline generation ────────────────────────────────────────────
 
-def gencspline(param, res: PSFResult, psfobj, keyname="I_model"):
+def gencspline(param, res: PSFResult, psf_model, keyname="psf_model_image"):
     """Generate cubic-spline coefficients from the fitted PSF model.
 
     Parameters
@@ -28,12 +28,12 @@ def gencspline(param, res: PSFResult, psfobj, keyname="I_model"):
     param : OmegaConf
         Experiment parameters (``channeltype`` is used).
     res : PSFResult
-        Result produced by ``psfobj.res2dict``.
-    psfobj : PSFInterface
+        Result produced by ``psf_model.res2dict``.
+    psf_model : PSFInterface
         PSF model object (used for ``sub_psfs`` in multi-channel mode).
     keyname : str
-        Key to look up in *res* (``"I_model"`` or
-        ``"I_model_reverse"``).
+        Key to look up in *res* (``"psf_model_image"`` or
+        ``"psf_model_image_reversed"``).
 
     Returns
     -------
@@ -45,9 +45,9 @@ def gencspline(param, res: PSFResult, psfobj, keyname="I_model"):
     if channeltype == "single":
         return _gencspline_single(res, keyname)
     if channeltype == "multi":
-        return _gencspline_multi(res, psfobj, keyname)
+        return _gencspline_multi(res, psf_model, keyname)
     if channeltype == "4pi":
-        return _gencspline_4pi(res, psfobj, keyname)
+        return _gencspline_4pi(res, psf_model, keyname)
 
     return []
 
@@ -64,11 +64,11 @@ def _gencspline_single(res: PSFResult, keyname):
     return coeff.astype(np.float32)
 
 
-def _gencspline_multi(res: PSFResult, psfobj, keyname):
+def _gencspline_multi(res: PSFResult, psf_model, keyname):
     ch0 = res.get("channel0")
     if ch0 is None or keyname not in ch0:
         return []
-    n_channel = len(psfobj.sub_psfs)
+    n_channel = len(psf_model.sub_psfs)
     I_model = np.stack([res["channel" + str(i)][keyname]
                         for i in range(n_channel)])
     offset = np.min(I_model)
@@ -79,18 +79,18 @@ def _gencspline_multi(res: PSFResult, psfobj, keyname):
     return np.stack(Iall).astype(np.float32)
 
 
-def _gencspline_4pi(res: PSFResult, psfobj, keyname):
+def _gencspline_4pi(res: PSFResult, psf_model, keyname):
     ch0 = res.get("channel0")
     if ch0 is None or keyname not in ch0:
         return []
-    n_channel = len(psfobj.sub_psfs)
+    n_channel = len(psf_model.sub_psfs)
 
     I_model_list = []
     A_model_list = []
     for i in range(n_channel):
         ch = res["channel" + str(i)]
         I_model_list.append(ch[keyname])
-        a_key = "A_model" if keyname == "I_model" else "A_model_reverse"
+        a_key = "A_model" if keyname == "psf_model_image" else "A_model_reverse"
         A_model_list.append(ch[a_key])
 
     I_model = np.stack(I_model_list)
@@ -115,15 +115,15 @@ def _gencspline_4pi(res: PSFResult, psfobj, keyname):
 
 # ── Result saving ──────────────────────────────────────────────────────
 
-def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
-                loc_FD=None):
+def save_result(param, psf_model, dataobj, fitter, learning_result, loc_result,
+                fourier_domain_positions=None):
     """Save fitting results, localisation results, and ROI data to an HDF5 file.
 
     Parameters
     ----------
     param : OmegaConf
         Experiment parameters.
-    psfobj : PSFInterface
+    psf_model : PSFInterface
         Fitted PSF model.
     dataobj : PreprocessedImageData
         Data object with extracted ROIs.
@@ -131,7 +131,7 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
         Fitter object (used for ``rois`` and ``forward_images``).
     learning_result, loc_result : list
         Fitting / localisation output as returned by :func:`fitting.learn_psf`.
-    loc_FD, optional
+    fourier_domain_positions, optional
         Fourier-domain localisation result, or ``None``.
 
     Returns
@@ -147,21 +147,21 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
     )
 
     savename = param.savename + "_" + param.PSFtype + "_" + param.channeltype
-    res = psfobj.res2dict(learning_result)
+    res = psf_model.res2dict(learning_result)
 
-    coeff_reverse = gencspline(param, res, psfobj, keyname="I_model_reverse")
-    coeff = gencspline(param, res, psfobj)
+    coeff_reverse = gencspline(param, res, psf_model, keyname="psf_model_image_reversed")
+    coeff = gencspline(param, res, psf_model)
 
-    locres = _build_locres(loc_result, coeff, coeff_reverse, loc_FD)
+    locres = _build_locres(loc_result, coeff, coeff_reverse, fourier_domain_positions)
 
     img, _, centers, file_idxs = dataobj.get_image_data()
     img = np.stack(img)
     rois = ROIsResult(
-        cor=np.stack(centers),
-        fileID=np.stack(file_idxs),
-        psf_data=fitter.rois,
-        psf_fit=fitter.forward_images,
-        image_size=img.shape,
+        roi_centers=np.stack(centers),
+        source_file_indices=np.stack(file_idxs),
+        measured_roi_images=fitter.rois,
+        modeled_roi_images=fitter.forward_images,
+        full_image_size=img.shape,
     )
 
     resfile = savename + ".h5"
@@ -173,7 +173,7 @@ def save_result(param, psfobj, dataobj, fitter, learning_result, loc_result,
     return resfile
 
 
-def _build_locres(loc_result, coeff, coeff_reverse, loc_FD):
+def _build_locres(loc_result, coeff, coeff_reverse, fourier_domain_positions):
     """Assemble the localization result for HDF5 storage."""
     loc = loc_result.positions
     if isinstance(loc, dict):
@@ -183,23 +183,23 @@ def _build_locres(loc_result, coeff, coeff_reverse, loc_FD):
         )
 
     loc_fd_obj = None
-    if loc_FD is not None:
-        if isinstance(loc_FD, dict):
+    if fourier_domain_positions is not None:
+        if isinstance(fourier_domain_positions, dict):
             loc_fd_obj = Positions(
-                x=loc_FD.get("x"), y=loc_FD.get("y"), z=loc_FD.get("z"),
+                x=fourier_domain_positions.get("x"), y=fourier_domain_positions.get("y"), z=fourier_domain_positions.get("z"),
             )
         else:
-            loc_fd_obj = loc_FD
+            loc_fd_obj = fourier_domain_positions
 
     return LocResResult(
-        P=loc_result.parameters,
-        CRLB=loc_result.crlb,
-        LL=loc_result.log_likelihood,
-        coeff=coeff,
-        coeff_bead=loc_result.spline_coefficients,
-        loc=loc,
-        coeff_reverse=coeff_reverse,
-        loc_FD=loc_fd_obj,
+        mle_parameters=loc_result.parameters,
+        cramer_rao_bounds=loc_result.crlb,
+        log_likelihoods=loc_result.log_likelihood,
+        spline_coefficients=coeff,
+        spline_coefficients_per_bead=loc_result.spline_coefficients,
+        localized_positions=loc,
+        spline_coefficients_reversed=coeff_reverse,
+        fourier_domain_positions=loc_fd_obj,
     )
 
 

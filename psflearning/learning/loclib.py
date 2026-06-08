@@ -504,12 +504,12 @@ class localizationlib:
         )
 
 
-    def loc_ast(self, psf_data: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, start_time: float = 0) -> LocalizationResult:
+    def loc_ast(self, rois: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, start_time: float = 0) -> LocalizationResult:
         """Perform single-channel astigmatic localization fitting."""
-        rsz = psf_data.shape[-1]
-        Nbead = psf_data.shape[0]
-        if len(psf_data.shape)>3:
-            Nz = psf_data.shape[-3]
+        rsz = rois.shape[-1]
+        Nbead = rois.shape[0]
+        if len(rois.shape)>3:
+            Nz = rois.shape[-3]
         else:
             Nz = 1
         Nfit = Nbead*Nz
@@ -528,7 +528,7 @@ class localizationlib:
         pbar.close()
 
         coeff = coeff.astype(np.float32)
-        data = psf_data.reshape((Nfit,rsz,rsz))
+        data = rois.reshape((Nfit,rsz,rsz))
         bxsz = np.min((rsz,20))
         data = data[:,rsz//2-bxsz//2:rsz//2+bxsz//2,rsz//2-bxsz//2:rsz//2+bxsz//2].astype(np.float32)
         data = np.maximum(data,0.0)

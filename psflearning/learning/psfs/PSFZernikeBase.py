@@ -24,12 +24,12 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
     Expected instance attributes (set by subclasses or calpupilfield):
         - data: PreprocessedImageDataInterface
         - options: configuration object
-        - Zk: np.ndarray of Zernike polynomials (shape: [n_coeffs, xsz, xsz])
+        - zernike_polynomial_basis: np.ndarray of Zernike polynomials (shape: [n_coeffs, xsz, xsz])
         - Zrange: np.ndarray of z positions (shape: [Nz, 1, 1])
         - kx, ky: k-space coordinates (complex)
         - kz, kz_med: z-k-space coordinates (complex)
         - aperture: binary pupil mask
-        - apoid: apodization function
+        - apodization: apodization function
         - paramxy: CZT parameters
         - normf: normalization factor
         - dipole_field: vector field for vector PSF (shape: [2, 3, xsz, xsz])
@@ -59,7 +59,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         return tf.complex(
             pupil_mag * tfm.cos(pupil_phase),
             pupil_mag * tfm.sin(pupil_phase),
-        ) * self.aperture * self.apoid
+        ) * self.aperture * self.apodization
 
     def _compute_phase(
         self,
@@ -105,24 +105,24 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         """
         c1 = self.spherical_terms
         n_max = getattr(self, 'n_max_mag', 15)
-        Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.Zk.shape[0]))
+        Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.zernike_polynomial_basis.shape[0]))
         mask = c1 < Nk
         c1 = c1[mask]
 
         if noll_index is not None:
             pupil_mag = tf.reduce_sum(
-                self.Zk[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+                self.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
         elif self.options.model.symmetric_mag:
             pupil_mag = tf.reduce_sum(
-                self.Zk[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+                self.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
         else:
             pupil_mag = tf.reduce_sum(
-                self.Zk[0:Nk] * Zcoeff_mag[0:Nk] * weight_mag, axis=0
+                self.zernike_polynomial_basis[0:Nk] * Zcoeff_mag[0:Nk] * weight_mag, axis=0
             )
         pupil_mag = tfm.maximum(pupil_mag, 0)
-        pupil_phase = tf.reduce_sum(self.Zk[3:] * Zcoeff_phase[3:] * weight_phase, axis=0)
+        pupil_phase = tf.reduce_sum(self.zernike_polynomial_basis[3:] * Zcoeff_phase[3:] * weight_phase, axis=0)
 
         return self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
@@ -149,15 +149,15 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
                 PupilFunction = pupil * phase_z * h
                 if phase_xy is not None:
                     PupilFunction = PupilFunction * phase_xy
-                psfA = im.cztfunc1(PupilFunction, self.paramxy)
-                I_res += psfA * tfm.conj(psfA) * self.normf
+                propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.paramxy)
+                I_res += propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normf
             return I_res
         else:
             PupilFunction = pupil * phase_z
             if phase_xy is not None:
                 PupilFunction = PupilFunction * phase_xy
-            I_res = im.cztfunc1(PupilFunction, self.paramxy)
-            return I_res * tfm.conj(I_res) * self.normf
+            propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.paramxy)
+            return propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normf
 
     def compute_gaussian_filter(self, sigma: tf.Tensor | np.ndarray) -> tf.Tensor:
         """
@@ -292,7 +292,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Trimmed PSF tensor.
         """
         Nz = self.Zrange.shape[0]
-        st = (self.bead_kernel.shape[0] - self.data.rois[0].shape[-3]) // 2
+        st = (self.bead_kernel.shape[0] - self.data.measured_roi_images[0].shape[-3]) // 2
         return psf[..., st : Nz - st, :, :]
 
     def interpolate_zernike_map(
@@ -374,15 +374,15 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         if intensity_phase is not None:
             Pupil2 = Pupil2 * tf.exp(1j * intensity_phase)
 
-        psfA1 = im.cztfunc1(Pupil1, self.paramxy)
-        psfA2 = im.cztfunc1(Pupil2, self.paramxy)
+        propagated_psf_amplitude_1 = im.cztfunc1(Pupil1, self.paramxy)
+        propagated_psf_amplitude_2 = im.cztfunc1(Pupil2, self.paramxy)
         I_res = (
             1
             + alpha**2
             + 2
             * alpha
             * tfm.real(
-                tf.exp(1j * phase0) * psfA1 * tfm.conj(psfA2) * self.normf
+                tf.exp(1j * phase0) * propagated_psf_amplitude_1 * tfm.conj(propagated_psf_amplitude_2) * self.normf
             )
         )
 

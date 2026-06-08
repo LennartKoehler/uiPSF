@@ -1,3 +1,3 @@
 from .FitterInterface import FitterInterface
 from .PSFLearner import PSFLearner
-from .Localizer import Localizer
+from .Localizer import localize, LocalizationOutput

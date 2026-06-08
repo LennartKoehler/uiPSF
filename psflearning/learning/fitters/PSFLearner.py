@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 
@@ -12,29 +11,22 @@ from ..data_representation.PreprocessedImageDataSingleChannel import Preprocesse
 from ..psfs.PSFInterface import LearnablePSFParameters, PSFInterface
 from ..optimizers import OptimizerABC
 from tqdm import tqdm
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple
-
-if TYPE_CHECKING:
-    from .Localizer import Localizer
+from typing import Any, Callable, List, Optional, Tuple
 
 
 class PSFLearner(FitterInterface):
     """
-    This class combines data, psf, optimizer and loss function and defines the actual learning process.
-    Responsible only for learning a PSF model, not for localization.
+    Combines optimizer and loss function to define the PSF learning process.
+    Holds only learning-related state (optimizer, loss, penalty params).
+    Data and PSF model are passed explicitly to each method call.
     """
     def __init__(
         self,
-        data: PreprocessedImageDataSingleChannel,
-        psf: PSFInterface,
         optimizer: OptimizerABC,
         loss_func: Callable,
         loss_func_single: Optional[Callable] = None,
         loss_weight: Optional[Any] = None,
     ) -> None:
-
-        self.data = data
-        self.psf: PSFInterface = psf
 
         self.loss_func = loss_func
         self.optimizer = optimizer
@@ -44,78 +36,101 @@ class PSFLearner(FitterInterface):
         self.loss_weight = loss_weight
         return
 
-    def __objective(
+    def _make_objective(
         self,
-        variables: LearnablePSFParameters,
-        mu: float,
-        ind: Optional[List[int]] = None,
-    ) -> Any:
+        psf: PSFInterface,
+        measured_roi_images: np.ndarray,
+    ) -> Callable:
+        """Create an objective closure that captures *psf* and *measured_roi_images*.
+
+        The returned callable has the signature expected by the optimizers:
+        ``objective(variables, mu, ind)``.
         """
-        Define the objective that should be optimized.
-        Basically asks the psf to calculate forward_images and combines those with the data
-        and the loss function to calculate the loss.
-        """
-        if ind is None:
-            ind = [0, variables.n_beads]
-        forward_images = self.psf.calc_forward_images(variables)
-        loss = self.loss_func(forward_images, self.data.rois[ind[0]:ind[1]], variables, mu, self.loss_weight)
-        return loss
+        def objective(
+            variables: LearnablePSFParameters,
+            mu: float = 1.0,
+            ind: Optional[List[int]] = None,
+        ) -> Any:
+            if ind is None:
+                ind = [0, measured_roi_images.shape[0]]
+            forward_images = psf.calc_forward_images(variables)
+            loss = self.loss_func(forward_images, measured_roi_images[ind[0]:ind[1]], variables, mu, self.loss_weight)
+            return loss
+        return objective
 
     def learn_psf(
         self,
+        data: PreprocessedImageDataSingleChannel,
+        psf: PSFInterface,
         variables: ZernikePSFVariables,
         start_time: Optional[float] = None,
     ) -> Tuple[ZernikePSFResult, np.ndarray, float]:
         """
-        Defines the procedure of the psf learning. Just asks the psf to calculate initial
-        values (if not provided), runs the optimization and uses the psf object to do postprocessing.
+        Run the PSF learning optimization.
+
+        Parameters
+        ----------
+        data : PreprocessedImageDataSingleChannel
+            Image data (ROIs are read from here).
+        psf : PSFInterface
+            PSF model used to compute forward images and postprocessing.
+        variables : ZernikePSFVariables
+            Initial learnable variables.
+        start_time : float, optional
+            Start-time stamp for progress reporting.
+
+        Returns
+        -------
+        tuple of (ZernikePSFResult, np.ndarray, float)
+            ``(fit_result, forward_images, toc)``
         """
+        objective = self._make_objective(psf, data.measured_roi_images)
 
         pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
 
-        variables = self.optimizer.minimize(self.__objective, variables, pbar)
+        variables = self.optimizer.minimize(objective, variables, pbar)
         toc = pbar.postfix[-1]['time']
         pbar.close()
 
-        # self.psf.ind = [0, variables.n_beads]
-        forward_images = self.psf.calc_forward_images(variables).numpy()
+        forward_images = psf.calc_forward_images(variables).numpy()
 
-        psfResult = self.psf.postprocess(variables)
+        fit_result = psf.postprocess(variables)
 
-        return psfResult, forward_images, toc
+        return fit_result, forward_images, toc
 
-    def remove_outliers_single(
-        self,
-        res: ZernikePSFResult,
-        locres: LocalizationResult,
-        threshold: list,
-    ) -> Optional[ZernikePSFVariables]:
-        """Remove outlier ROIs for single-channel data based on rejection metrics.
+def remove_outliers_single(
+    data: PreprocessedImageDataSingleChannel,
+    res: ZernikePSFResult,
+    locres: LocalizationResult,
+    forward_images: np.ndarray,
+    threshold: list,
+) -> Optional[ZernikePSFVariables]:
+    """Remove outlier ROIs for single-channel data based on rejection metrics.
 
-        Filters the internal data object and learning variables in-place.
-        Returns the filtered variables if any outliers were removed,
-        or *None* if no outliers were found (or all would be removed).
-        """
-        metric, minI= create_reject_metric(
-            res,
-            locres,
-            psf_modeled,
-            self.data)
-        mask = get_mask(metric, minI, threshold)
-        delete_id = np.where(~mask)
-        print('outlier id:', str(delete_id[0]))
+    Filters the data object and learning variables in-place.
+    Returns the filtered variables if any outliers were removed,
+    or *None* if no outliers were found (or all would be removed).
+    """
+    metric, minI = create_reject_metric(
+        res,
+        locres,
+        forward_images,
+        data.measured_roi_images)
+    mask = get_mask(metric, minI, threshold)
+    delete_id = np.where(~mask)
+    print('outlier id:', str(delete_id[0]))
 
-        if not ((delete_id[0].size > 0) & (delete_id[0].size < mask.size)):
-            return None
+    if not ((delete_id[0].size > 0) & (delete_id[0].size < mask.size)):
+        return None
 
-        _, rois, centers, file_idxs = self.data.get_image_data()
-        self.data.rois = rois[mask]
-        self.data.centers = centers[mask, :]
-        self.data.file_idxs = file_idxs[mask]
-        _, rois, _, _ = self.data.get_image_data()
-        print(f"rois shape channel : {rois.shape}")
+    _, rois, centers, file_idxs = data.get_image_data()
+    data.measured_roi_images = rois[mask]
+    data.roi_centers = centers[mask, :]
+    data.source_file_indices = file_idxs[mask]
+    _, rois, _, _ = data.get_image_data()
+    print(f"rois shape channel : {rois.shape}")
 
-        return res.filter_by_mask(mask)
+    return res.filter_by_mask(mask)
 
 
 def get_mask(metric, minI, threshold):
@@ -128,8 +143,8 @@ def get_mask(metric, minI, threshold):
 def create_reject_metric(
     res: ZernikePSFResult,
     locres: LocalizationResult,
-    psf_modeled: np.ndarray,
-    psf_data: np.ndarray
+    modeled_forward_images: np.ndarray,
+    measured_bead_images: np.ndarray
 ) -> Tuple[List[np.ndarray], Any]:
 
     intensity = np.abs(np.squeeze(res.intensities, axis=(-1, -2)))
@@ -137,8 +152,8 @@ def create_reject_metric(
         intensityR = intensity
     else:
         intensityR = np.real(np.squeeze(res.intensities, axis=(-1, -2)))
-    mydiff = psf_modeled[:, 1:-1] - psf_data[:, 1:-1]
-    mse1 = np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(psf_data, axis=(-3, -2, -1))
+    mydiff = modeled_forward_images[:, 1:-1] - measured_bead_images[:, 1:-1]
+    mse1 = np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(measured_bead_images, axis=(-3, -2, -1))
 
     if len(intensity.shape) < 2:
         avgI = intensity
@@ -147,7 +162,7 @@ def create_reject_metric(
         avgI = np.median(intensity, axis=1)
         minI = np.min(intensityR, axis=1)
 
-    if psf_data.shape[0] == 1:
+    if measured_bead_images.shape[0] == 1:
         intRatio = np.array([1.0])
         mseRatio = np.array([1.0])
     else:

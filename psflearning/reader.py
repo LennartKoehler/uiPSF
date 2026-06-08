@@ -191,10 +191,10 @@ class Reader:
 
     @staticmethod
     def load_initial_pupil(
-        param: Union[RunParameters, DictConfig], psfobj, dataobj
+        param: Union[RunParameters, DictConfig], psf_model, dataobj
     ) -> None:
         """Load initial pupil / PSF / Zernike coefficients from an HDF5
-        file into *psfobj* in-place.
+        file into *psf_model* in-place.
 
         If ``param.option.model.init_pupil_file`` is falsy, this is a
         no-op.
@@ -204,7 +204,7 @@ class Reader:
         param : DictConfig
             Experiment parameters (``channeltype`` and
             ``option.model.init_pupil_file`` are used).
-        psfobj : PSFInterface
+        psf_model : PSFInterface
             PSF model object to populate with initial values.
         dataobj : PreprocessedImageData
             Data object (used for channel count in multi-channel mode).
@@ -217,9 +217,9 @@ class Reader:
 
         with h5.File(pupilfile, "r") as f:
             if channeltype == "single":
-                _load_single_channel_pupil(psfobj, f)
+                _load_single_channel_pupil(psf_model, f)
             else:
-                _load_multi_channel_pupil(psfobj, f, channeltype, dataobj)
+                _load_multi_channel_pupil(psf_model, f, channeltype, dataobj)
 
     # ── Internal helpers (image transforms) ──────────────────────────────
 
@@ -364,32 +364,32 @@ def _reorder_ref_channel(images: np.ndarray, param: Union[RunParameters, DictCon
     return images[idx]
 
 
-def _load_single_channel_pupil(psfobj, f: h5.File) -> None:
+def _load_single_channel_pupil(psf_model, f: h5.File) -> None:
     res_group: h5.Group = f["res"]  # type: ignore[assignment]
     try:
-        psfobj.initpupil = np.array(res_group["pupil"])  # type: ignore[index]
+        psf_model.initial_pupil = np.array(res_group["pupil"])  # type: ignore[index]
     except (KeyError, OSError):
         pass
 
     try:
-        psfobj.Zoffset = np.array(res_group["zoffset"])  # type: ignore[index]
+        psf_model.z_offset = np.array(res_group["zoffset"])  # type: ignore[index]
     except (KeyError, OSError):
         pass
 
     try:
-        psfobj.initpsf = np.array(
+        psf_model.initial_psf_image = np.array(
             res_group["I_model_reverse"]  # type: ignore[index]
         ).astype(np.float32)
     except (KeyError, OSError):
         try:
-            psfobj.initpsf = np.array(
+            psf_model.initial_psf_image = np.array(
                 res_group["I_model"]  # type: ignore[index]
             ).astype(np.float32)
         except (KeyError, OSError):
             pass
 
     try:
-        psfobj.initzcoeff = np.array(
+        psf_model.initial_zernike_coefficients = np.array(
             res_group["zernike_coeff"]  # type: ignore[index]
         ).astype(np.float32)
     except (KeyError, OSError):
@@ -397,28 +397,28 @@ def _load_single_channel_pupil(psfobj, f: h5.File) -> None:
 
 
 def _load_multi_channel_pupil(
-    psfobj, f: h5.File, channeltype: str, dataobj
+    psf_model, f: h5.File, channeltype: str, dataobj
 ) -> None:
     n_channels = len(dataobj.channels)
     res_group: h5.Group = f["res"]  # type: ignore[assignment]
-    psfobj.initpupil = [None] * n_channels
-    psfobj.initpsf = [None] * n_channels
+    psf_model.initial_pupil = [None] * n_channels
+    psf_model.initial_psf_image = [None] * n_channels
     if channeltype == "4pi":
-        psfobj.initA = [None] * n_channels
+        psf_model.initial_interference_amplitude = [None] * n_channels
 
     for k in range(n_channels):
         ch: h5.Group = res_group["channel" + str(k)]  # type: ignore[assignment]
         try:
-            psfobj.initpupil[k] = np.array(ch["pupil"])  # type: ignore[index]
+            psf_model.initial_pupil[k] = np.array(ch["pupil"])  # type: ignore[index]
         except (KeyError, OSError):
             pass
         try:
-            psfobj.Zoffset = np.array(ch["zoffset"])  # type: ignore[index]
+            psf_model.z_offset = np.array(ch["zoffset"])  # type: ignore[index]
         except (KeyError, OSError):
             pass
-        psfobj.initpsf[k] = np.array(ch["I_model"]).astype(np.float32)  # type: ignore[index]
+        psf_model.initial_psf_image[k] = np.array(ch["I_model"]).astype(np.float32)  # type: ignore[index]
         if channeltype == "4pi":
-            psfobj.initA[k] = np.array(ch["A_model"]).astype(  # type: ignore[index]
+            psf_model.initial_interference_amplitude[k] = np.array(ch["A_model"]).astype(  # type: ignore[index]
                 np.complex64
             )
 

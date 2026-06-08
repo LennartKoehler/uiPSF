@@ -23,8 +23,8 @@ Typical workflows
 >>> images = lib.load_data(param)
 >>> psf_info = lib.get_psf_info(param)
 >>> dataobj = lib.prep_data(param, images)
->>> psfobj, fitter, res, loc = lib.learn_psf(param, dataobj, psf_info)
->>> resfile = lib.save_result(param, psfobj, dataobj, fitter, res, loc)
+>>> psf_model, fit_result, locres, toc = lib.learn_with_relearn(param, dataobj, psf_info)
+>>> resfile = lib.save_result(param, psf_model, dataobj, fit_result, locres)
 
 **2. Insitu iterative learning:**
 
@@ -56,14 +56,13 @@ from .fitting import (
     initialize_psf,
     learn_psf,
     learn_with_relearn,
-    localize,
     relearn,
-    localize_FD,
     iterlearn_psf as _iterlearn_psf,
 )
 from .analysis import genpsf, calstrehlratio, calfwhm
 
-from .learning import PSFLearner, Localizer
+from .learning import PSFLearner, LocalizationOutput
+from .learning.fitters.Localizer import localize
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.PSFInterface import PSFInterface
 from .learning.loclib import LocalizationResult
@@ -110,7 +109,7 @@ class PSFLearningLib:
 
     # ── Reading (delegates to Reader) ────────────────────────────────
 
-    def load_data(
+    def read_images(
         self, param: Union[RunParameters, DictConfig], frange: Optional[Tuple[int, int]] = None
     ) -> np.ndarray:
         """Load raw image stacks from disk.
@@ -139,13 +138,13 @@ class PSFLearningLib:
     @staticmethod
     def learn_psf(
         param: Union[RunParameters, DictConfig], dataobj, psf_info: PSFInfo, time: Optional[float] = None
-    ) -> Tuple[PSFInterface, ZernikePSFResult, Optional[float]]:
+    ) -> Tuple[PSFInterface, ZernikePSFResult, PSFLearner, np.ndarray, Optional[float]]:
         """Run PSF fitting.
 
         Returns
         -------
         tuple
-            ``(psfobj, learner, learning_result, toc)``
+            ``(psf_model, fit_result, learner, forward_images, toc)``
 
         See :func:`fitting.learn_psf`.
         """
@@ -154,13 +153,13 @@ class PSFLearningLib:
     @staticmethod
     def learn_with_relearn(
         param: Union[RunParameters, DictConfig], dataobj, psf_info: PSFInfo, time: Optional[float] = None
-    ) -> Tuple[PSFInterface, ZernikePSFResult, LocalizationResult, Optional[float]]:
+    ) -> Tuple[PSFInterface, ZernikePSFResult, LocalizationResult, np.ndarray, Optional[float]]:
         """Learn PSF, localize, remove outliers and re-learn.
 
         Returns
         -------
         tuple
-            ``(psfobj, learner, localizer, learning_result, loc_result)``
+            ``(psf_model, fit_result, locres, forward_images, toc)``
 
         See :func:`fitting.learn_with_relearn`.
         """
@@ -168,44 +167,50 @@ class PSFLearningLib:
 
     @staticmethod
     def localize_psf(
-        learner, res, param: Union[RunParameters, DictConfig], toc: Optional[float] = None
-    ) -> tuple:
+        data, psf, fit_result, param: Union[RunParameters, DictConfig], toc: Optional[float] = None
+    ) -> LocalizationResult:
         """Run localization using a learned PSF.
 
         Returns
         -------
         tuple
-            ``(localizer, loc_result, toc)``
+            ``(locres, toc)``
 
         See :func:`fitting.localize`.
         """
-        return localize(learner, res, param, toc=toc)
+        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+        return locres
 
     @staticmethod
     def relearn_psf(
-        learner, res, param: Union[RunParameters, DictConfig], toc: Optional[float] = None,
+        data, psf, learner, forward_images, fit_result, param: Union[RunParameters, DictConfig], toc: Optional[float] = None,
         threshold: Optional[list] = None,
-    ) -> tuple:
+    ) -> Tuple[ZernikePSFResult, LocalizationResult, np.ndarray, Optional[float]]:
         """Re-learn PSF after rejecting outliers, then re-localize.
 
         Returns
         -------
         tuple
-            ``(localizer, res, loc_result, toc)``
+            ``(fit_result, locres, forward_images, toc)``
 
         See :func:`fitting.relearn`.
         """
-        return relearn(learner, res, param, toc=toc, threshold=threshold)
+        return relearn(data, psf, learner, forward_images, fit_result, param, toc=toc, threshold=threshold)
 
     @staticmethod
     def localize_fd(
-        param: Union[RunParameters, DictConfig], learning_result, fitter, initz=None
+        param: Union[RunParameters, DictConfig], fit_result, data, psf, forward_images, initz=None
     ):
         """Localise in the Fourier domain.
 
         See :func:`fitting.localize_FD`.
         """
-        return localize_FD(param, learning_result, fitter, initz=initz)
+
+        return localize_FD(
+            fit_result, data.measured_roi_images, forward_images, data, psf,
+            channeltype=param.channeltype,
+            usecuda=param.usecuda, initz=initz, plot=param.plotall,
+        )
 
     def iterlearn_psf(
         self, param: Union[RunParameters, DictConfig], dataobj, time: Optional[float] = None
@@ -213,8 +218,8 @@ class PSFLearningLib:
         """Iterative PSF learning for insitu data.
 
         On each iteration the result of the previous iteration is used to
-        initialise the pupil for the next one, and the photon threshold
-        is gradually relaxed.
+        initialise the pupil for the next one, and the photon threshold is
+        gradually relaxed.
 
         .. note::
            This method mutates the following fields of *param*:
@@ -238,19 +243,21 @@ class PSFLearningLib:
     def save_result(
         self,
         param: Union[RunParameters, DictConfig],
-        psfobj,
+        psf_model,
         dataobj,
-        learning_result: list,
-        loc_result: list,
-        loc_FD=None,
+        fit_result: ZernikePSFResult,
+        loc_result,
+        fourier_domain_positions=None,
+        forward_images: Optional[np.ndarray] = None,
     ) -> str:
         """Save results to HDF5.
 
         See :meth:`Writer.save_result`.
         """
         return self._writer.save_result(
-            param, psfobj, dataobj,
-            learning_result, loc_result, loc_FD=loc_FD,
+            param, psf_model, dataobj,
+            fit_result, loc_result, fourier_domain_positions=fourier_domain_positions,
+            forward_images=forward_images,
         )
 
     def write_h5(
@@ -270,14 +277,14 @@ class PSFLearningLib:
         )
 
     def generate_cspline(
-        self, param: Union[RunParameters, DictConfig], res: PSFResult, psfobj, keyname: str = "I_model"
+        self, param: Union[RunParameters, DictConfig], res: PSFResult, psf_model, keyname: str = "psf_model_image"
     ):
         """Generate cubic-spline coefficients.
 
         See :meth:`Writer.generate_cspline`.
         """
         return self._writer.generate_cspline(
-            param, res, psfobj, keyname=keyname
+            param, res, psf_model, keyname=keyname
         )
 
     # ── Analysis (pure computation) ──────────────────────────────────

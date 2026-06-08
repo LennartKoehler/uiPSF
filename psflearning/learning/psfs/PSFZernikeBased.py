@@ -24,14 +24,14 @@ class ZernikePSFResult:
     positions: np.ndarray
     backgrounds: np.ndarray
     intensities: np.ndarray
-    model_bead: np.ndarray
-    model: np.ndarray
+    psf_model_image_with_bead: np.ndarray
+    psf_model_image: np.ndarray
     pupil: np.ndarray
     zernike_magnitude: np.ndarray
     zernike_phase: np.ndarray
     sigma: np.ndarray
     drift_xy: np.ndarray
-    model_reversed: np.ndarray
+    psf_model_image_reversed: np.ndarray
     _variables: Optional[ZernikePSFVariables] = field(default=None, repr=False)
 
     def filter_by_mask(self, mask: np.ndarray) -> ZernikePSFVariables:
@@ -143,16 +143,16 @@ class PSFZernikeBased(PSFZernikeBase):
         self.zT = None
         self.bead_kernel = None
         self.options = options
-        self.initpupil: Optional[Union[np.ndarray, list]] = None
-        self.initpsf: Optional[np.ndarray] = None
-        self.initzcoeff: Optional[np.ndarray] = None
-        self.initA: Optional[list] = None
-        self.Zoffset: Optional[np.ndarray] = None
+        self.initial_pupil: Optional[Union[np.ndarray, list]] = None
+        self.initial_psf_image: Optional[np.ndarray] = None
+        self.initial_zernike_coefficients: Optional[np.ndarray] = None
+        self.initial_interference_amplitude: Optional[list] = None
+        self.z_offset: Optional[np.ndarray] = None
         self.defocus = np.float32(0)
         self.default_loss_func = mse_real_zernike
         self.psftype = 'scalar'
 
-    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float) -> tuple[ZernikePSFVariables, Any]:
+    def calc_initials(self, data: PreprocessedImageDataInterface, start_time: float = 0.0) -> tuple[ZernikePSFVariables, Any]:
         """
         Provides initial values for the optimizable variables for the fitter class.
         """
@@ -200,8 +200,8 @@ class PSFZernikeBased(PSFZernikeBase):
         sigma = np.ones((2,)) * self.options.model.blur_sigma * np.pi
         self.init_sigma = sigma
 
-        init_zernike_coeff_magnitude = np.zeros((self.Zk.shape[0], 1, 1))
-        init_zernike_coeff_phase = np.zeros((self.Zk.shape[0], 1, 1))
+        init_zernike_coeff_magnitude = np.zeros((self.zernike_polynomial_basis.shape[0], 1, 1))
+        init_zernike_coeff_phase = np.zeros((self.zernike_polynomial_basis.shape[0], 1, 1))
 
         init_zernike_coeff_magnitude[0, 0, 0] = 1 / self.weight.zernike_magnitude
 
@@ -255,8 +255,8 @@ class PSFZernikeBased(PSFZernikeBase):
             sigma = variables[5]
             drift_xy = variables[6]
 
-        if self.initpupil is not None:
-            pupil = self.initpupil
+        if self.initial_pupil is not None:
+            pupil = self.initial_pupil
         else:
             pupil = self.compute_pupil_from_zernike(
                 zernike_coeff_magnitude, zernike_coeff_phase,
@@ -275,23 +275,23 @@ class PSFZernikeBased(PSFZernikeBase):
             self.kz_med,
         )
 
-        psf_intensity = self.propagate_pupil(pupil, phase_z, phase_xy)
+        propagated_psf_intensity = self.propagate_pupil(pupil, phase_z, phase_xy)
 
         bin_factor = self.options.model.bin
         if not self.options.model.var_blur:
             sigma = self.init_sigma
 
-        psf_blurred = self.apply_blur_3d(psf_intensity, sigma, use_bead_kernel=True)
-        psf_binned = self.bin_image_3d(psf_blurred, bin_factor)
-        psf_fit = psf_binned[..., 0]
-        psf_fit = self.trim_z_padding(psf_fit)
+        blurred_psf_intensity = self.apply_blur_3d(propagated_psf_intensity, sigma, use_bead_kernel=True)
+        binned_psf_intensity = self.bin_image_3d(blurred_psf_intensity, bin_factor)
+        trimmed_psf_intensity = binned_psf_intensity[..., 0]
+        trimmed_psf_intensity = self.trim_z_padding(trimmed_psf_intensity)
 
         if self.options.model.estimate_drift:
             drift_xy = drift_xy * self.weight.drift
-            psf_shifted = self.applyDrift(psf_fit, drift_xy)
-            forward_images = psf_shifted * intensities * self.weight.intensity + backgrounds * self.weight.background
+            drift_corrected_psf = self.applyDrift(trimmed_psf_intensity, drift_xy)
+            forward_images = drift_corrected_psf * intensities * self.weight.intensity + backgrounds * self.weight.background
         else:
-            forward_images = psf_fit * intensities * self.weight.intensity + backgrounds * self.weight.background
+            forward_images = trimmed_psf_intensity * intensities * self.weight.intensity + backgrounds * self.weight.background
 
         return forward_images
 
@@ -305,30 +305,30 @@ class PSFZernikeBased(PSFZernikeBase):
     ) -> tuple[tf.Tensor, Any]:
         """Generate a PSF model from Zernike coefficients or a given pupil function."""
         if pupil is None:
-            pupil_mag = tf.reduce_sum(self.Zk * Zcoeff_magnitude, axis=0)
+            pupil_mag = tf.reduce_sum(self.zernike_polynomial_basis * Zcoeff_magnitude, axis=0)
             pupil_mag = tf.math.maximum(pupil_mag, 0)
-            pupil_phase = tf.reduce_sum(self.Zk * Zcoeff_phase, axis=0)
+            pupil_phase = tf.reduce_sum(self.zernike_polynomial_basis * Zcoeff_phase, axis=0)
             pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase)
 
         phiz = -1j * 2 * np.pi * self.kz * (self.Zrange + self.defocus)
         phase_z = tf.exp(phiz)
-        psf_intensity = self.propagate_pupil(pupil, phase_z)
+        propagated_psf_intensity = self.propagate_pupil(pupil, phase_z)
 
         bin_factor = self.options.model.bin
-        psf_blurred = self.apply_blur_3d(psf_intensity, sigma, use_bead_kernel=addbead)
+        blurred_psf_intensity = self.apply_blur_3d(propagated_psf_intensity, sigma, use_bead_kernel=addbead)
 
-        if len(psf_blurred.shape) == 5:
-            psf_model = self.bin_image_3d(psf_blurred, bin_factor)
+        if len(blurred_psf_intensity.shape) == 5:
+            psf_model_image = self.bin_image_3d(blurred_psf_intensity, bin_factor)
         else:
             kernel = np.ones((bin_factor, bin_factor, 1, 1), dtype=np.float32)
-            psf_model = tf.nn.convolution(
-                psf_blurred, kernel,
+            psf_model_image = tf.nn.convolution(
+                blurred_psf_intensity, kernel,
                 strides=(1, bin_factor, bin_factor, 1),
                 padding='SAME', data_format='NHWC',
             )
-        psf_model = psf_model[..., 0]
+        psf_model_image = psf_model_image[..., 0]
 
-        return psf_model, pupil
+        return psf_model_image, pupil
 
     def postprocess(self, variables: ZernikePSFVariables) -> ZernikePSFResult:
         """
@@ -353,15 +353,15 @@ class PSFZernikeBased(PSFZernikeBase):
         bin_factor = self.options.model.bin
         positions[:, 1:] = positions[:, 1:] / bin_factor
 
-        if self.initpupil is not None:
-            pupil = self.initpupil
-            psf_model, _ = self.genpsfmodel(sigma, pupil=pupil)
-            psf_model_bead, _ = self.genpsfmodel(sigma, pupil=pupil, addbead=True)
+        if self.initial_pupil is not None:
+            pupil = self.initial_pupil
+            psf_model_image, _ = self.genpsfmodel(sigma, pupil=pupil)
+            psf_model_image_with_bead, _ = self.genpsfmodel(sigma, pupil=pupil, addbead=True)
         else:
-            psf_model, pupil = self.genpsfmodel(
+            psf_model_image, pupil = self.genpsfmodel(
                 sigma, Zcoeff_magnitude=zernike_coeff_magnitude, Zcoeff_phase=zernike_coeff_phase,
             )
-            psf_model_bead, _ = self.genpsfmodel(
+            psf_model_image_with_bead, _ = self.genpsfmodel(
                 sigma, Zcoeff_magnitude=zernike_coeff_magnitude, Zcoeff_phase=zernike_coeff_phase, addbead=True,
             )
 
@@ -390,34 +390,34 @@ class PSFZernikeBased(PSFZernikeBase):
             positions=global_positions.astype(np.float32),
             backgrounds=backgrounds * self.weight.background,
             intensities=intensities * self.weight.intensity,
-            model_bead=psf_model_bead,
-            model=psf_model,
+            psf_model_image_with_bead=psf_model_image_with_bead,
+            psf_model_image=psf_model_image,
             pupil=np.complex64(pupil),
             zernike_magnitude=zernike_coeff_magnitude,
             zernike_phase=zernike_coeff_phase,
             sigma=sigma,
             drift_xy=drift_xy * self.weight.drift,
-            model_reversed=np.flip(psf_model, axis=-3),
+            psf_model_image_reversed=np.flip(psf_model_image, axis=-3),
             _variables=variables,
         )
 
     def res2dict(self, res: ZernikePSFResult) -> PSFResult:
         assert self.data is not None
         return PSFResult(
-            pos=res.positions,
-            bg=np.squeeze(res.backgrounds),
-            intensity=np.squeeze(res.intensities),
-            I_model_bead=res.model_bead,
-            I_model=res.model,
+            fitted_positions=res.positions,
+            fitted_backgrounds=np.squeeze(res.backgrounds),
+            fitted_intensities=np.squeeze(res.intensities),
+            psf_model_image_with_bead=res.psf_model_image_with_bead,
+            psf_model_image=res.psf_model_image,
             pupil=res.pupil,
-            zernike_coeff=np.array([np.squeeze(res.zernike_magnitude), np.squeeze(res.zernike_phase)]),
-            sigma=np.squeeze(res.sigma) / np.pi,
+            zernike_coefficients=np.array([np.squeeze(res.zernike_magnitude), np.squeeze(res.zernike_phase)]),
+            gaussian_blur_sigma=np.squeeze(res.sigma) / np.pi,
             drift_rate=res.drift_xy,
-            I_model_reverse=res.model_reversed,
-            offset=np.min(res.model),
-            zernike_polynomial=self.Zk,
-            apodization=self.apoid,
-            cor_all=self.data.centers_all,
-            cor=self.data.centers,
+            psf_model_image_reversed=res.psf_model_image_reversed,
+            model_image_offset=np.min(res.psf_model_image),
+            zernike_polynomial_basis=self.zernike_polynomial_basis,
+            apodization=self.apodization,
+            all_roi_centers=self.data.roi_centers_all,
+            selected_roi_centers=self.data.roi_centers,
         )
 

@@ -42,10 +42,10 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
 
         self.images = None
         self.check_and_init_images(images) # check if input is valid
-        self.rois = np.array([])
-        self.centers = np.array([])
-        self.file_idxs = np.array([])
-        self.rois_available = False
+        self.measured_roi_images = np.array([])
+        self.roi_centers = np.array([])
+        self.source_file_indices = np.array([])
+        self.rois_extracted = False
         self.min_border_dist = None # needed in cut_new_rois()
         self.skew_const = None
         self.zT = None
@@ -111,11 +111,11 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         if not all_rois:
             #mbox.showerror("segmentation error","no bead is found")
             raise RuntimeError('no bead is found')
-        self.rois = np.concatenate(all_rois)[0:L].astype(np.float32)
-        self.centers = np.concatenate(all_centers)[0:L].astype(np.int32)
-        self.centers_all = np.concatenate(all_centers)[0:L].astype(np.int32)
-        self.file_idxs = np.array(file_idxs)[0:L].astype(np.int32)
-        self.rois_available = True
+        self.measured_roi_images = np.concatenate(all_rois)[0:L].astype(np.float32)
+        self.roi_centers = np.concatenate(all_centers)[0:L].astype(np.int32)
+        self.roi_centers_all = np.concatenate(all_centers)[0:L].astype(np.int32)
+        self.source_file_indices = np.array(file_idxs)[0:L].astype(np.int32)
+        self.rois_extracted = True
         self.image_size = self.images.shape
         return
 
@@ -143,7 +143,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         """
         # set default values
         if roi_size is None:
-            roi_size = self.rois.shape[-2:]
+            roi_size = self.measured_roi_images.shape[-2:]
         if min_border_dist is None:
             min_border_dist = self.min_border_dist
 
@@ -181,10 +181,10 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             new_rois.append(nip.multiROIExtract(self.images[file_idx], [centers[i]], roi_shape))
 
         # convert to numpy arrays and make sure everything has correct dtypes
-        self.rois = np.concatenate(new_rois).astype(np.float32)
-        self.centers = centers.astype(np.int32)
-        self.file_idxs = file_idxs.astype(np.int32)
-        self.rois_available = True
+        self.measured_roi_images = np.concatenate(new_rois).astype(np.float32)
+        self.roi_centers = centers.astype(np.int32)
+        self.source_file_indices = file_idxs.astype(np.int32)
+        self.rois_extracted = True
 
         return
 
@@ -193,8 +193,8 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         Provides the necessary image information (e.g., rois, centers, ...) for the psf class
         and the fitter class.
         """
-        if self.rois_available:
-            return self.images, self.rois, self.centers, self.file_idxs
+        if self.rois_extracted:
+            return self.images, self.measured_roi_images, self.roi_centers, self.source_file_indices
         else:
             raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
 
@@ -220,7 +220,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         else:
             self.find_rois(roi_size, gaus_sigma, min_border_dist, max_threshold, max_kernel, FOV, min_center_dist,max_bead_number)
         img, rois, cor, _ = self.get_image_data()
-        self.centers_all = cor
+        self.roi_centers_all = cor
         self.image_size = img.shape
         print(f"rois shape channel : {rois.shape}")
 
@@ -228,7 +228,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.pixelsize_x = pixelsize_x
         self.bead_radius = bead_radius
         offset = np.min((np.quantile(rois,1e-3),0))
-        self.rois = rois-offset
+        self.measured_roi_images = rois-offset
         if plot:
             plt.figure(figsize=[6,6])
             plt.plot(cor[:,-1],cor[:,-2],'o',markersize = 8,markerfacecolor='none')
@@ -241,7 +241,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             padsize = np.full((len(rois.shape), ), value, dtype=object)
             padsize[-3] = (np.int32(bead_radius//pixelsize_z),np.int32(bead_radius//pixelsize_z))
             roisL = np.pad(rois,tuple(padsize),mode='edge')
-            self.rois = roisL
+            self.measured_roi_images = roisL
             print(f"padded rois shape channel : {roisL.shape}")
 
         # generate bead kernel
@@ -274,7 +274,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             ccy = np.int32(np.round(roisize_y//2-skew_const[-2]*Nz/2 + i*skew_const[-2]))
             tmp = rois[...,i,ccy-bxsz[-2]//2:ccy+bxsz[-2]//2+bxsz[-2]%2,ccx-bxsz[-1]//2:ccx+bxsz[-1]//2+bxsz[-1]%2]
             rois1[...,i,:,:] = tmp
-        self.rois = rois1
+        self.measured_roi_images = rois1
         self.skew_const = skew_const
         #self.rawrois = rois
         print(f"deskewed rois shape channel : {rois1.shape}")

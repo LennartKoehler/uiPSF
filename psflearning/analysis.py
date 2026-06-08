@@ -61,47 +61,47 @@ def genpsf(
         pixelsize_x=p.pixel_size.x,
         pixelsize_y=p.pixel_size.y,
         pixelsize_z=p.pixel_size.z,
-        image_size=list(f.rois.image_size),
+        image_size=list(f.rois.full_image_size),
         rois=np.zeros((Nz, xsz, xsz)),
     )
 
-    psfobj = initialize_psf(param, psf_info)
+    psf_model = initialize_psf(param, psf_info)
 
     if p.channeltype == "single":
-        _genpsf_single(psfobj, dataobj, f, p, Nz, stagepos)
+        _genpsf_single(psf_model, dataobj, f, p, Nz, stagepos)
     elif p.channeltype == "multi":
-        _genpsf_multi(psfobj, dataobj, f, p, Nz, stagepos)
+        _genpsf_multi(psf_model, dataobj, f, p, Nz, stagepos)
 
-    return f, psfobj
+    return f, psf_model
 
 
-def _genpsf_single(psfobj, dataobj, f, p, Nz, stagepos):
-    sigma = f.res.sigma
-    Zcoeff_magnitude = f.res.zernike_coeff[0].reshape(
-        f.res.zernike_coeff[0].shape + (1, 1)
+def _genpsf_single(psf_model, dataobj, f, p, Nz, stagepos):
+    sigma = f.res.gaussian_blur_sigma
+    Zcoeff_magnitude = f.res.zernike_coefficients[0].reshape(
+        f.res.zernike_coefficients[0].shape + (1, 1)
     )
-    Zcoeff_phase = f.res.zernike_coeff[1].reshape(
-        f.res.zernike_coeff[1].shape + (1, 1)
+    Zcoeff_phase = f.res.zernike_coefficients[1].reshape(
+        f.res.zernike_coefficients[1].shape + (1, 1)
     )
-    psfobj.data = dataobj
+    psf_model.data = dataobj
 
     if "insitu" in p.PSFtype:
-        psfobj.stagepos = stagepos / p.pixel_size.z
-        psfobj.estzoffset(Nz=Nz)
-    elif psfobj.psftype == "vector":
-        psfobj.calpupilfield("vector", Nz=Nz)
+        psf_model.stagepos = stagepos / p.pixel_size.z
+        psf_model.estzoffset(Nz=Nz)
+    elif psf_model.psftype == "vector":
+        psf_model.calpupilfield("vector", Nz=Nz)
     else:
-        psfobj.calpupilfield("scalar", Nz=Nz)
+        psf_model.calpupilfield("scalar", Nz=Nz)
 
     if "FD" in p.PSFtype:
-        f.res.I_model = _genpsf_fd(psfobj, f, sigma)
+        f.res.psf_model_image = _genpsf_fd(psf_model, f, sigma)
     else:
-        f.res.I_model, _ = psfobj.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
+        f.res.psf_model_image, _ = psf_model.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
 
 
-def _genpsf_fd(psfobj, f, sigma):
+def _genpsf_fd(psf_model, f, sigma):
     """Generate a field-dependent PSF model (batched over positions)."""
-    img_size = f.rois.image_size
+    img_size = f.rois.full_image_size
     zmap = f.res.zernike_map
     dx = img_size[-1] / zmap.shape[-1] / 2
     dy = img_size[-2] / zmap.shape[-2] / 2
@@ -120,43 +120,43 @@ def _genpsf_fd(psfobj, f, sigma):
             np.linspace(0, cor.shape[0], cor.shape[0] // batchsize + 2)
         )
     )
-    I_model = None
+    psf_model_image = None
     for i in range(len(ind) - 1):
-        I0, _, _ = psfobj.genpsfmodel(
+        I0, _, _ = psf_model.genpsfmodel(
             sigma, Zmap=zmap, cor=cor[ind[i] : ind[i + 1]]
         )
-        I_model = I0 if I_model is None else np.vstack((I_model, I0))
-    return I_model
+        psf_model_image = I0 if psf_model_image is None else np.vstack((psf_model_image, I0))
+    return psf_model_image
 
 
-def _genpsf_multi(psfobj, dataobj, f, p, Nz, stagepos):
-    n_channel = f.rois.cor.shape[0]
-    psfobj.sub_psfs = [None] * n_channel
+def _genpsf_multi(psf_model, dataobj, f, p, Nz, stagepos):
+    n_channel = f.rois.roi_centers.shape[0]
+    psf_model.sub_psfs = [None] * n_channel
 
     for i in range(n_channel):
-        psf = psfobj.psftype(options=psfobj.options)
-        psf.psftype = psfobj.PSFtype
-        psfobj.sub_psfs[i] = psf
+        sub_psf_model = psf_model.psftype(options=psf_model.options)
+        sub_psf_model.psftype = psf_model.PSFtype
+        psf_model.sub_psfs[i] = sub_psf_model
 
-        sigma = f.res["channel" + str(i)].sigma
-        Zcoeff_magnitude = f.res["channel" + str(i)].zernike_coeff[0].reshape(
-            f.res["channel" + str(i)].zernike_coeff[0].shape + (1, 1)
+        sigma = f.res["channel" + str(i)].gaussian_blur_sigma
+        Zcoeff_magnitude = f.res["channel" + str(i)].zernike_coefficients[0].reshape(
+            f.res["channel" + str(i)].zernike_coefficients[0].shape + (1, 1)
         )
-        Zcoeff_phase = f.res["channel" + str(i)].zernike_coeff[1].reshape(
-            f.res["channel" + str(i)].zernike_coeff[1].shape + (1, 1)
+        Zcoeff_phase = f.res["channel" + str(i)].zernike_coefficients[1].reshape(
+            f.res["channel" + str(i)].zernike_coefficients[1].shape + (1, 1)
         )
-        psf.data = dataobj
+        sub_psf_model.data = dataobj
 
         if "insitu" in p.PSFtype:
-            psf.stagepos = stagepos / p.pixel_size.z
-            psf.estzoffset(Nz=Nz)
-        elif psf.psftype == "vector":
-            psf.calpupilfield("vector", Nz=Nz)
+            sub_psf_model.stagepos = stagepos / p.pixel_size.z
+            sub_psf_model.estzoffset(Nz=Nz)
+        elif sub_psf_model.psftype == "vector":
+            sub_psf_model.calpupilfield("vector", Nz=Nz)
         else:
-            psf.calpupilfield("scalar", Nz=Nz)
+            sub_psf_model.calpupilfield("scalar", Nz=Nz)
 
-        I_model, _ = psf.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
-        f.res["channel" + str(i)].I_model = I_model
+        psf_model_image, _ = sub_psf_model.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
+        f.res["channel" + str(i)].psf_model_image = psf_model_image
 
 
 def calstrehlratio(
@@ -201,20 +201,20 @@ def _strehl_single(p, f1, f, psf_info, xsz):
         f1.res.zernike_map = f.res.zernike_map.copy()
         f1.res.zernike_map[1, 0:4] = 0.0
         f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
-        I_model = f1.res.I_model / np.sum(
-            f1.res.I_model, axis=(-1, -2), keepdims=True
+        psf_model_image = f1.res.psf_model_image / np.sum(
+            f1.res.psf_model_image, axis=(-1, -2), keepdims=True
         )
-        I1 = I_model[:, 0, xsz // 2, xsz // 2]
+        I1 = psf_model_image[:, 0, xsz // 2, xsz // 2]
 
         f1.res.zernike_map = np.zeros(
             f1.res.zernike_map.shape, dtype=np.float32
         )
         f1.res.zernike_map[0, 0] = 1
         f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
-        I_model = f1.res.I_model / np.sum(
-            f1.res.I_model, axis=(-1, -2), keepdims=True
+        psf_model_image = f1.res.psf_model_image / np.sum(
+            f1.res.psf_model_image, axis=(-1, -2), keepdims=True
         )
-        I0 = I_model[:, 0, xsz // 2, xsz // 2]
+        I0 = psf_model_image[:, 0, xsz // 2, xsz // 2]
 
         strehlratio = np.float32(I1 / I0)
         strehlratio_map = np.reshape(
@@ -223,19 +223,19 @@ def _strehl_single(p, f1, f, psf_info, xsz):
         )
         return strehlratio_map
 
-    f1.res.zernike_coeff[1, :, 0:4] = 0.0
+    f1.res.zernike_coefficients[1, :, 0:4] = 0.0
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
-    I1 = f1.res.I_model[0, xsz // 2, xsz // 2] / np.sum(
-        f1.res.I_model
+    I1 = f1.res.psf_model_image[0, xsz // 2, xsz // 2] / np.sum(
+        f1.res.psf_model_image
     )
 
-    f1.res.zernike_coeff = np.zeros(
-        f1.res.zernike_coeff.shape, dtype=np.float32
+    f1.res.zernike_coefficients = np.zeros(
+        f1.res.zernike_coefficients.shape, dtype=np.float32
     )
-    f1.res.zernike_coeff[0, :, 0] = 1
+    f1.res.zernike_coefficients[0, :, 0] = 1
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
-    I0 = f1.res.I_model[0, xsz // 2, xsz // 2] / np.sum(
-        f1.res.I_model
+    I0 = f1.res.psf_model_image[0, xsz // 2, xsz // 2] / np.sum(
+        f1.res.psf_model_image
     )
 
     strehlratio = np.float32(I1 / I0)
@@ -244,28 +244,28 @@ def _strehl_single(p, f1, f, psf_info, xsz):
 
 
 def _strehl_multi(p, f1, psf_info, xsz):
-    n_channel = f1.rois.cor.shape[0]
+    n_channel = f1.rois.roi_centers.shape[0]
     I1, I0 = [], []
 
     for i in range(n_channel):
-        f1.res["channel" + str(i)].zernike_coeff[1, :, 0:4] = 0.0
+        f1.res["channel" + str(i)].zernike_coefficients[1, :, 0:4] = 0.0
 
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=xsz)
     coeff = np.zeros(
-        f1.res.channel0.zernike_coeff.shape, dtype=np.float32
+        f1.res.channel0.zernike_coefficients.shape, dtype=np.float32
     )
     coeff[0, :, 0] = 1
 
     for i in range(n_channel):
-        I_model = f1.res["channel" + str(i)].I_model
-        I_model = I_model / np.sum(I_model)
-        I1.append(I_model[0, xsz // 2, xsz // 2])
-        f1.res["channel" + str(i)].zernike_coeff = coeff
+        psf_model_image = f1.res["channel" + str(i)].psf_model_image
+        psf_model_image = psf_model_image / np.sum(psf_model_image)
+        I1.append(psf_model_image[0, xsz // 2, xsz // 2])
+        f1.res["channel" + str(i)].zernike_coefficients = coeff
 
     f1, _ = genpsf(p, f1, psf_info, Nz=1, xsz=31)
     for i in range(n_channel):
-        I_model = f1.res["channel" + str(i)].I_model
-        I0.append(I_model[0, xsz // 2, xsz // 2] / np.sum(I_model))
+        psf_model_image = f1.res["channel" + str(i)].psf_model_image
+        I0.append(psf_model_image[0, xsz // 2, xsz // 2] / np.sum(psf_model_image))
 
     strehlratio = np.float32(np.stack(I1) / np.stack(I0))
     print("Strehl ratio: ", strehlratio)
@@ -273,7 +273,7 @@ def _strehl_multi(p, f1, psf_info, xsz):
 
 
 def _strehl_4pi(f):
-    n_channel = f.rois.cor.shape[0]
+    n_channel = f.rois.roi_centers.shape[0]
     mdepth = np.array(
         [
             f.res["channel" + str(i)].modulation_depth
@@ -316,16 +316,16 @@ def calfwhm(
 
 def _fwhm_single(p, f, f1, psf_info):
     if "FD" in p.PSFtype:
-        psfsize = f.res.I_model_bead.shape
+        psfsize = f.res.psf_model_image_with_bead.shape
         f1.res.zernike_map = f.res.zernike_map.copy()
         f1.res.zernike_map[1, 0:4] = 0.0
         f1, _ = genpsf(p, f1, psf_info, Nz=psfsize[-3], xsz=psfsize[-1])
-        I_model = f1.res.I_model
+        psf_model_image = f1.res.psf_model_image
 
-        fwhmx = np.zeros(I_model.shape[0])
-        fwhmy = np.zeros(I_model.shape[0])
-        fwhmz = np.zeros(I_model.shape[0])
-        for i, psfi in enumerate(I_model):
+        fwhmx = np.zeros(psf_model_image.shape[0])
+        fwhmy = np.zeros(psf_model_image.shape[0])
+        fwhmz = np.zeros(psf_model_image.shape[0])
+        for i, psfi in enumerate(psf_model_image):
             Ix, xh, Iy, yh, Iz, zh = getfwhm(psfi)
             fwhmx[i] = np.diff(xh) * p.pixel_size.x * 1e3
             fwhmy[i] = np.diff(yh) * p.pixel_size.y * 1e3
@@ -338,8 +338,8 @@ def _fwhm_single(p, f, f1, psf_info):
 
         return fwhmx_map, fwhmy_map, fwhmz_map
 
-    I_model = f.res.I_model
-    Ix, xh, Iy, yh, Iz, zh = getfwhm(I_model)
+    psf_model_image = f.res.psf_model_image
+    Ix, xh, Iy, yh, Iz, zh = getfwhm(psf_model_image)
     fwhmx = np.diff(xh) * p.pixel_size.x * 1e3
     fwhmy = np.diff(yh) * p.pixel_size.y * 1e3
     fwhmz = np.diff(zh) * p.pixel_size.z * 1e3
@@ -348,12 +348,12 @@ def _fwhm_single(p, f, f1, psf_info):
 
 
 def _fwhm_multi(p, f):
-    n_channel = f.rois.cor.shape[0]
+    n_channel = f.rois.roi_centers.shape[0]
     fwhmx, fwhmy, fwhmz = [], [], []
 
     for i in range(n_channel):
-        I_model = f.res["channel" + str(i)].I_model
-        Ix, xh, Iy, yh, Iz, zh = getfwhm(I_model)
+        psf_model_image = f.res["channel" + str(i)].psf_model_image
+        Ix, xh, Iy, yh, Iz, zh = getfwhm(psf_model_image)
         fwhmxi = np.diff(xh) * p.pixel_size.x * 1e3
         fwhmyi = np.diff(yh) * p.pixel_size.y * 1e3
         fwhmzi = np.diff(zh) * p.pixel_size.z * 1e3
@@ -368,7 +368,7 @@ def _fwhm_multi(p, f):
     )
 
 
-def getfwhm(I_model: np.ndarray) -> Tuple:
+def getfwhm(psf_model_image: np.ndarray) -> Tuple:
     """Compute the FWHM along x, y, and z of a 3-D PSF volume.
 
     Returns
@@ -377,14 +377,14 @@ def getfwhm(I_model: np.ndarray) -> Tuple:
         ``(Ix, xh, Iy, yh, Iz, zh)`` where each ``*h`` is a 2-element
         array with the half-maximum crossing positions.
     """
-    cor = np.unravel_index(np.argmax(I_model), I_model.shape)
+    cor = np.unravel_index(np.argmax(psf_model_image), psf_model_image.shape)
 
-    Ix = I_model[cor[0], cor[1]]
+    Ix = psf_model_image[cor[0], cor[1]]
     xh = get1dfwhm(Ix, cor[2])
-    Iy = I_model[cor[0], :, cor[2]]
+    Iy = psf_model_image[cor[0], :, cor[2]]
     yh = get1dfwhm(Iy, cor[1])
 
-    Iz = I_model[:, cor[1], cor[2]]
+    Iz = psf_model_image[:, cor[1], cor[2]]
     zh = get1dfwhm(Iz, cor[0])
 
     return Ix, xh, Iy, yh, Iz, zh

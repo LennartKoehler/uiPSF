@@ -1,8 +1,8 @@
 from .psfs.PSFZernikeBased import PSFZernikeBased, ZernikePSFResult
 
 from .fitters.FitterInterface import FitterInterface
-from .fitters.PSFLearner import PSFLearner
-from .fitters.Localizer import Localizer
+from .fitters.PSFLearner import PSFLearner, remove_outliers_single
+from .fitters.Localizer import localize, LocalizationOutput
 
 from .loss_functions import (
     mse_real,

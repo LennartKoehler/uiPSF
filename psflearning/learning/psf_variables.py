@@ -84,61 +84,91 @@ class PSFResult:
     Replaces the ``res_dict`` returned by ``PSFZernikeBased.res2dict()``.
     """
 
-    pos: np.ndarray
-    bg: np.ndarray
-    intensity: np.ndarray
-    I_model_bead: np.ndarray
-    I_model: np.ndarray
+    fitted_positions: np.ndarray
+    fitted_backgrounds: np.ndarray
+    fitted_intensities: np.ndarray
+    psf_model_image_with_bead: np.ndarray
+    psf_model_image: np.ndarray
     pupil: np.ndarray
-    zernike_coeff: np.ndarray
-    sigma: np.ndarray
+    zernike_coefficients: np.ndarray
+    gaussian_blur_sigma: np.ndarray
     drift_rate: np.ndarray
-    I_model_reverse: np.ndarray
-    offset: float
-    zernike_polynomial: np.ndarray
+    psf_model_image_reversed: np.ndarray
+    model_image_offset: float
+    zernike_polynomial_basis: np.ndarray
     apodization: np.ndarray
-    cor_all: np.ndarray
-    cor: np.ndarray
+    all_roi_centers: np.ndarray
+    selected_roi_centers: np.ndarray
     channels: Optional[dict[str, "PSFResult"]] = None
+
+    _BACKWARD_COMPAT_KEYS = {
+        "pos": "fitted_positions",
+        "bg": "fitted_backgrounds",
+        "intensity": "fitted_intensities",
+        "I_model_bead": "psf_model_image_with_bead",
+        "I_model": "psf_model_image",
+        "zernike_coeff": "zernike_coefficients",
+        "sigma": "gaussian_blur_sigma",
+        "I_model_reverse": "psf_model_image_reversed",
+        "offset": "model_image_offset",
+        "zernike_polynomial": "zernike_polynomial_basis",
+        "cor_all": "all_roi_centers",
+        "cor": "selected_roi_centers",
+    }
 
     def to_dict(self) -> dict[str, Any]:
         d = {
-            "pos": self.pos,
-            "bg": self.bg,
-            "intensity": self.intensity,
-            "I_model_bead": self.I_model_bead,
-            "I_model": self.I_model,
+            "fitted_positions": self.fitted_positions,
+            "fitted_backgrounds": self.fitted_backgrounds,
+            "fitted_intensities": self.fitted_intensities,
+            "psf_model_image_with_bead": self.psf_model_image_with_bead,
+            "psf_model_image": self.psf_model_image,
             "pupil": self.pupil,
-            "zernike_coeff": self.zernike_coeff,
-            "sigma": self.sigma,
+            "zernike_coefficients": self.zernike_coefficients,
+            "gaussian_blur_sigma": self.gaussian_blur_sigma,
             "drift_rate": self.drift_rate,
-            "I_model_reverse": self.I_model_reverse,
-            "offset": self.offset,
-            "zernike_polynomial": self.zernike_polynomial,
+            "psf_model_image_reversed": self.psf_model_image_reversed,
+            "model_image_offset": self.model_image_offset,
+            "zernike_polynomial_basis": self.zernike_polynomial_basis,
             "apodization": self.apodization,
-            "cor_all": self.cor_all,
-            "cor": self.cor,
+            "all_roi_centers": self.all_roi_centers,
+            "selected_roi_centers": self.selected_roi_centers,
         }
         if self.channels is not None:
             for name, ch in self.channels.items():
                 d[name] = ch.to_dict()
         return d
 
+    def _resolve_key(self, key: str) -> str:
+        if key in self._BACKWARD_COMPAT_KEYS:
+            return self._BACKWARD_COMPAT_KEYS[key]
+        return key
+
     def __getitem__(self, key: str) -> Any:
-        if key in ("pos", "bg", "intensity", "I_model_bead", "I_model",
-                     "pupil", "zernike_coeff", "sigma", "drift_rate",
-                     "I_model_reverse", "offset", "zernike_polynomial",
-                     "apodization", "cor_all", "cor"):
-            return getattr(self, key if key != "zernike_coeff" else "zernike_coeff")
+        resolved = self._resolve_key(key)
+        if resolved in (
+            "fitted_positions", "fitted_backgrounds", "fitted_intensities",
+            "psf_model_image_with_bead", "psf_model_image", "pupil",
+            "zernike_coefficients", "gaussian_blur_sigma", "drift_rate",
+            "psf_model_image_reversed", "model_image_offset",
+            "zernike_polynomial_basis", "apodization", "all_roi_centers",
+            "selected_roi_centers",
+        ):
+            return getattr(self, resolved)
         if self.channels is not None and key in self.channels:
             return self.channels[key]
         raise KeyError(key)
 
     def __contains__(self, key: str) -> bool:
-        if key in ("pos", "bg", "intensity", "I_model_bead", "I_model",
-                     "pupil", "zernike_coeff", "sigma", "drift_rate",
-                     "I_model_reverse", "offset", "zernike_polynomial",
-                     "apodization", "cor_all", "cor"):
+        resolved = self._resolve_key(key)
+        if resolved in (
+            "fitted_positions", "fitted_backgrounds", "fitted_intensities",
+            "psf_model_image_with_bead", "psf_model_image", "pupil",
+            "zernike_coefficients", "gaussian_blur_sigma", "drift_rate",
+            "psf_model_image_reversed", "model_image_offset",
+            "zernike_polynomial_basis", "apodization", "all_roi_centers",
+            "selected_roi_centers",
+        ):
             return True
         if self.channels is not None and key in self.channels:
             return True
@@ -161,31 +191,31 @@ class LocResResult:
     Replaces the ``locres_dict`` assembled in ``Writer._build_locres_dict()``.
     """
 
-    P: np.ndarray
-    CRLB: np.ndarray
-    LL: np.ndarray
-    coeff: Union[np.ndarray, list]
-    coeff_bead: np.ndarray
-    loc: Union[Positions, dict]
-    coeff_reverse: Union[np.ndarray, list]
-    loc_FD: Optional[Union[Positions, dict]] = None
+    mle_parameters: np.ndarray
+    cramer_rao_bounds: np.ndarray
+    log_likelihoods: np.ndarray
+    spline_coefficients: Union[np.ndarray, list]
+    spline_coefficients_per_bead: np.ndarray
+    localized_positions: Union[Positions, dict]
+    spline_coefficients_reversed: Union[np.ndarray, list]
+    fourier_domain_positions: Optional[Union[Positions, dict]] = None
 
     def to_dict(self) -> dict[str, Any]:
-        loc_val = self.loc.to_dict() if isinstance(self.loc, Positions) else self.loc
+        loc_val = self.localized_positions.to_dict() if isinstance(self.localized_positions, Positions) else self.localized_positions
         d: dict[str, Any] = {
-            "P": self.P,
-            "CRLB": self.CRLB,
-            "LL": self.LL,
-            "coeff": self.coeff,
-            "coeff_bead": self.coeff_bead,
-            "loc": loc_val,
-            "coeff_reverse": self.coeff_reverse,
+            "mle_parameters": self.mle_parameters,
+            "cramer_rao_bounds": self.cramer_rao_bounds,
+            "log_likelihoods": self.log_likelihoods,
+            "spline_coefficients": self.spline_coefficients,
+            "spline_coefficients_per_bead": self.spline_coefficients_per_bead,
+            "localized_positions": loc_val,
+            "spline_coefficients_reversed": self.spline_coefficients_reversed,
         }
-        if self.loc_FD is not None:
-            d["loc_FD"] = (
-                self.loc_FD.to_dict()
-                if isinstance(self.loc_FD, Positions)
-                else self.loc_FD
+        if self.fourier_domain_positions is not None:
+            d["fourier_domain_positions"] = (
+                self.fourier_domain_positions.to_dict()
+                if isinstance(self.fourier_domain_positions, Positions)
+                else self.fourier_domain_positions
             )
         return d
 
@@ -200,11 +230,11 @@ class ROIsResult:
     Replaces the ``rois_dict`` assembled in ``Writer.save_result()``.
     """
 
-    cor: np.ndarray
-    fileID: np.ndarray
-    psf_data: np.ndarray
-    psf_fit: np.ndarray
-    image_size: tuple
+    roi_centers: np.ndarray
+    source_file_indices: np.ndarray
+    measured_roi_images: np.ndarray
+    modeled_roi_images: np.ndarray
+    full_image_size: tuple
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

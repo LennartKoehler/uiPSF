@@ -17,9 +17,9 @@ class PreprocessedImageDataInterface:
 
     __metaclass__ = ABCMeta
 
-    rois: np.ndarray
-    centers: np.ndarray
-    centers_all: np.ndarray
+    measured_roi_images: np.ndarray
+    roi_centers: np.ndarray
+    roi_centers_all: np.ndarray
     images: np.ndarray
     pixelsize_x: float
     pixelsize_y: float

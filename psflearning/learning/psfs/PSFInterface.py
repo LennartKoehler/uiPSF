@@ -122,7 +122,7 @@ class PSFInterface(ABC):
     bead_kernel: Any
     options: Any
     aperture: Any
-    apoid: Any
+    apodization: Any
     paramxy: Any
     normf: Any
     Zrange: Any
@@ -130,7 +130,7 @@ class PSFInterface(ABC):
     ky: Any
     kz: Any
     kz_med: Any
-    Zk: Any
+    zernike_polynomial_basis: Any
     zv: Any
     kxv: Any
     kyv: Any
@@ -144,7 +144,7 @@ class PSFInterface(ABC):
     psftype: str
     imgcenter: Any
     sub_psfs: Any
-    psfnorm: Any
+    pupil_normalization_factor: Any
 
     @abstractmethod
     def calc_initials(self, data: PreprocessedImageDataInterface) -> list:
@@ -191,9 +191,9 @@ class PSFInterface(ABC):
             Nz = self.bead_kernel.shape[0]
         assert Nz is not None
         bin = self.options.model.bin
-        Lx = self.data.rois.shape[-1]*bin
-        Ly = self.data.rois.shape[-2]*bin
-        Lz = self.data.rois.shape[-3]
+        Lx = self.data.measured_roi_images.shape[-1]*bin
+        Ly = self.data.measured_roi_images.shape[-2]*bin
+        Lz = self.data.measured_roi_images.shape[-3]
         xsz =self.options.model.pupilsize
 
         xrange = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx)
@@ -261,14 +261,14 @@ class PSFInterface(ABC):
         pupil = self.aperture*apoid
         pupil = tf.cast(pupil,tf.complex64)
         if fieldtype=='scalar':
-            psfA = im.cztfunc1(pupil,self.paramxy)
-            self.normf = np.complex64(1/np.sum(psfA*np.conj(psfA)))
+            propagated_psf_amplitude = im.cztfunc1(pupil,self.paramxy)
+            self.normf = np.complex64(1/np.sum(propagated_psf_amplitude*np.conj(propagated_psf_amplitude)))
         else:
             I_res = 0.0
             for h in self.dipole_field:
                 PupilFunction = pupil*h
-                psfA = im.cztfunc1(PupilFunction,self.paramxy)
-                I_res += psfA*tf.math.conj(psfA)
+                propagated_psf_amplitude = im.cztfunc1(PupilFunction,self.paramxy)
+                I_res += propagated_psf_amplitude*tf.math.conj(propagated_psf_amplitude)
             self.normf = np.complex64(1/np.sum(I_res))
         self.Zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
         self.kx = np.complex64(xx*NA/emission_wavelength)*pixelsize_x
@@ -276,14 +276,14 @@ class PSFInterface(ABC):
         self.kz = np.complex64(kz)*self.data.pixelsize_z
         self.kz_med = np.complex64(kz_med)*self.data.pixelsize_z
         self.k = np.complex64(nmed/emission_wavelength)*self.data.pixelsize_z
-        self.apoid = np.complex64(apoid)
+        self.apodization = np.complex64(apoid)
         self.nimm = nimm
         self.nmed = nmed
-        self.Zk = np.float32(Zk)
+        self.zernike_polynomial_basis = np.float32(Zk)
 
-        Lx = self.data.rois.shape[-1]
-        Ly = self.data.rois.shape[-2]
-        Lz = self.data.rois.shape[-3]
+        Lx = self.data.measured_roi_images.shape[-1]
+        Ly = self.data.measured_roi_images.shape[-2]
+        Lz = self.data.measured_roi_images.shape[-3]
 
         self.zv = np.linspace(0,Lz-1,Lz,dtype=np.float32).reshape(Lz,1,1)-Lz/2
         self.kxv = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx,dtype=np.float32)/Lx
@@ -295,8 +295,8 @@ class PSFInterface(ABC):
         """
         Calculate the normalization factor from a pupil function.
         """
-        psfA = im.cztfunc1(pupil,self.paramxy)
-        normf = tf.math.real(tf.reduce_sum(psfA*tf.math.conj(psfA)))
+        propagated_psf_amplitude = im.cztfunc1(pupil,self.paramxy)
+        normf = tf.math.real(tf.reduce_sum(propagated_psf_amplitude*tf.math.conj(propagated_psf_amplitude)))
         return normf
 
     def gen_bead_kernel(self, isVolume: bool = False) -> None:
@@ -306,13 +306,13 @@ class PSFInterface(ABC):
         pixelsize_z = self.data.pixelsize_z
         bead_radius = self.data.bead_radius
         if isVolume:
-            Nz = self.data.rois.shape[-3]
+            Nz = self.data.measured_roi_images.shape[-3]
             bin = 1
         else:
-            Nz = self.data.rois.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
+            Nz = self.data.measured_roi_images.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
             bin = self.options.model.bin
 
-        Lx = self.data.rois.shape[-1]*bin
+        Lx = self.data.measured_roi_images.shape[-1]*bin
         pixelsize_x = self.data.pixelsize_x/bin
         pixelsize_y = self.data.pixelsize_y/bin
 

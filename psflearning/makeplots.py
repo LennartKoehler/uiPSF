@@ -2,22 +2,22 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import numpy as np
 
-def showlearnedparam(f,p):
+def showlearnedparam(res, rois, p):
     if p.channeltype == 'single':
-        cor = f.rois.cor
-        pos = f.res.pos
-        photon = f.res.intensity.transpose()
-        bg = f.res.bg
-        drift = f.res.drift_rate
+        cor = rois.roi_centers
+        pos = res.fitted_positions
+        photon = res.fitted_intensities.transpose()
+        bg = res.fitted_backgrounds
+        drift = res.drift_rate
     else:
-        cor = f.rois.cor[0]
-        pos = f.res.channel0.pos
-        photon = f.res.channel0.intensity.transpose()
-        bg = f.res.channel0.bg
-        drift = f.res.channel0.drift_rate
+        cor = rois.roi_centers[0]
+        pos = res.channel0.fitted_positions
+        photon = res.channel0.fitted_intensities.transpose()
+        bg = res.channel0.fitted_backgrounds
+        drift = res.channel0.drift_rate
     if p.channeltype == '4pi':
-        phi = np.angle(f.res.channel0.intensity)
-        photon = np.abs(f.res.channel0.intensity.transpose())
+        phi = np.angle(res.channel0.fitted_intensities)
+        photon = np.abs(res.channel0.fitted_intensities.transpose())
 
     fig = plt.figure(figsize=[16,8])
     spec = gridspec.GridSpec(ncols=4, nrows=2,
@@ -61,21 +61,21 @@ def showlearnedparam(f,p):
 
     return
 
-def showlearnedparam_insitu(f,p):
+def showlearnedparam_insitu(res, rois, p):
     if p.channeltype == 'single':
-        cor = f.rois.cor
-        pos = f.res.pos
-        photon = f.res.intensity
-        bg = f.res.bg
+        cor = rois.roi_centers
+        pos = res.fitted_positions
+        photon = res.fitted_intensities
+        bg = res.fitted_backgrounds
 
     else:
-        cor = f.rois.cor[0]
-        pos = f.res.channel0.pos
-        photon = f.res.channel0.intensity
-        bg = f.res.channel0.bg
+        cor = rois.roi_centers[0]
+        pos = res.channel0.fitted_positions
+        photon = res.channel0.fitted_intensities
+        bg = res.channel0.fitted_backgrounds
     if p.channeltype == '4pi':
-        phi = np.angle(f.res.channel0.intensity)
-        photon = np.abs(f.res.channel0.intensity)
+        phi = np.angle(res.channel0.fitted_intensities)
+        photon = np.abs(res.channel0.fitted_intensities)
 
     fig = plt.figure(figsize=[16,8])
     spec = gridspec.GridSpec(ncols=4, nrows=2,
@@ -115,13 +115,13 @@ def showlearnedparam_insitu(f,p):
 
     return
 
-def showpupil(f,p, index=None):
+def showpupil(res, rois, p, index=None):
     if p.channeltype == 'single':
         fig = plt.figure(figsize=[12,5])
         if index is None:
-            pupil = f.res.pupil
+            pupil = res.pupil
         else:
-            pupil = f.res.pupil[index]
+            pupil = res.pupil[index]
 
         ax = fig.add_subplot(1,2,1)
         plt.imshow(np.abs(pupil),interpolation='nearest')
@@ -132,14 +132,14 @@ def showpupil(f,p, index=None):
         plt.title('pupil phase')
         plt.colorbar()
     elif p.channeltype == 'multi':
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         fig = plt.figure(figsize=[5*Nchannel,4])
         fig1 = plt.figure(figsize=[5*Nchannel,4])
         for i in range(0,Nchannel):
             if index is None:
-                pupil = f.res['channel'+str(i)].pupil
+                pupil = res['channel'+str(i)].pupil
             else:
-                pupil = f.res['channel'+str(i)].pupil[index]
+                pupil = res['channel'+str(i)].pupil[index]
 
             ax = fig.add_subplot(1,Nchannel,i+1)
             pupil_mag = np.abs(pupil)
@@ -154,17 +154,17 @@ def showpupil(f,p, index=None):
             ax1.set_title('pupil phase ' + str(i))
             fig1.colorbar(h1,ax=ax1)
     elif p.channeltype == '4pi':
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         fig = plt.figure(figsize=[20,8])
         for i in range(0,Nchannel):
             ax = fig.add_subplot(2,4,i+1)
-            pupil_mag = np.abs(f.res['channel'+str(i)].pupil1)
+            pupil_mag = np.abs(res['channel'+str(i)].pupil1)
             plt.imshow(pupil_mag,interpolation='nearest')
             plt.axis('off')
             plt.title('top pupil magnitude ' + str(i))
             plt.colorbar()
             ax = fig.add_subplot(2,4,i+5)
-            pupil_mag = np.abs(f.res['channel'+str(i)].pupil2)
+            pupil_mag = np.abs(res['channel'+str(i)].pupil2)
             plt.imshow(pupil_mag,interpolation='nearest')
             plt.axis('off')
             plt.title('bottom pupil magnitude ' + str(i))
@@ -172,20 +172,20 @@ def showpupil(f,p, index=None):
         fig = plt.figure(figsize=[20,8])
         for i in range(0,Nchannel):
             ax = fig.add_subplot(2,4,i+1)
-            pupil_phase = np.angle(f.res['channel'+str(i)].pupil1)
+            pupil_phase = np.angle(res['channel'+str(i)].pupil1)
             plt.imshow(pupil_phase,interpolation='nearest')
             plt.axis('off')
             plt.title('top pupil phase ' + str(i))
             plt.colorbar()
             ax = fig.add_subplot(2,4,i+5)
-            pupil_phase = np.angle(f.res['channel'+str(i)].pupil2)
+            pupil_phase = np.angle(res['channel'+str(i)].pupil2)
             plt.imshow(pupil_phase,interpolation='nearest')
             plt.axis('off')
             plt.title('bottom pupil phase ' + str(i))
             plt.colorbar()
     return
 
-def showzernike(f,p,index=None):
+def showzernike(res, rois, p, index=None):
     n_max = p.option.model.n_max
     Nk = (n_max+1)*(n_max+2)//2
 
@@ -203,15 +203,15 @@ def showzernike(f,p,index=None):
     if p.channeltype == 'single':
         fig = plt.figure(figsize=[10,8])
         if index is None:
-            zcoeff = f.res.zernike_coeff
+            zcoeff = res.zernike_coefficients
 
         else:
-            zcoeff = f.res.zernike_coeff[:,index]
+            zcoeff = res.zernike_coefficients[:,index]
 
-        if len(f.res.pupil.shape)>2:
-            aperture=np.float32(np.abs(f.res.pupil[0])>0.0)
+        if len(res.pupil.shape)>2:
+            aperture=np.float32(np.abs(res.pupil[0])>0.0)
         else:
-            aperture=np.float32(np.abs(f.res.pupil)>0.0)
+            aperture=np.float32(np.abs(res.pupil)>0.0)
         ax = fig.add_subplot(2,1,1)
         ax.plot(zcoeff.transpose(),'.-')
         ax.plot(indz[mask],zcoeff[1,indz[mask]],'ko',markersize = 6,mfc='none')
@@ -229,7 +229,7 @@ def showzernike(f,p,index=None):
             transform=ax1.transAxes, horizontalalignment='left',verticalalignment='top')
         ax1.set_axis_off()
 
-        Zk = f.res.zernike_polynomial
+        Zk = res.zernike_polynomial_basis
 
         pupil_mag = np.sum(Zk*zcoeff[0].reshape((-1,1,1)),axis=0)*aperture
         pupil_phase = np.sum(Zk[4:]*zcoeff[1][4:].reshape((-1,1,1)),axis=0)*aperture
@@ -244,25 +244,25 @@ def showzernike(f,p,index=None):
         plt.colorbar()
         plt.title('pupil phase',fontsize=20)
     elif p.channeltype == 'multi':
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         fig = plt.figure(figsize=[12,6])
         ax1 = fig.add_subplot(2,2,1)
         ax2 = fig.add_subplot(2,2,2)
         ax5 = fig.add_subplot(2,2,3)
         fig1 = plt.figure(figsize=[5*Nchannel,4])
         fig2 = plt.figure(figsize=[5*Nchannel,4])
-        Zk = f.res.channel0.zernike_polynomial
+        Zk = res.channel0.zernike_polynomial_basis
 
         for i in range(0,Nchannel):
             if index is None:
-                zcoeff = f.res['channel'+str(i)].zernike_coeff
+                zcoeff = res['channel'+str(i)].zernike_coefficients
             else:
-                zcoeff = f.res['channel'+str(i)].zernike_coeff[:,index]
+                zcoeff = res['channel'+str(i)].zernike_coefficients[:,index]
 
-            if len(f.res['channel'+str(i)].pupil.shape)>2:
-                aperture=np.float32(np.abs(f.res['channel'+str(i)].pupil[0])>0.0)
+            if len(res['channel'+str(i)].pupil.shape)>2:
+                aperture=np.float32(np.abs(res['channel'+str(i)].pupil[0])>0.0)
             else:
-                aperture=np.float32(np.abs(f.res['channel'+str(i)].pupil)>0.0)
+                aperture=np.float32(np.abs(res['channel'+str(i)].pupil)>0.0)
 
 
             line, = ax1.plot(zcoeff[0],'.-')
@@ -300,7 +300,7 @@ def showzernike(f,p,index=None):
                     transform=ax5.transAxes, horizontalalignment='left',verticalalignment='top')
         ax5.set_axis_off()
     elif p.channeltype == '4pi':
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         fig = plt.figure(figsize=[12,10])
         ax1 = fig.add_subplot(3,2,1)
         ax2 = fig.add_subplot(3,2,2)
@@ -309,12 +309,12 @@ def showzernike(f,p,index=None):
         ax5 = fig.add_subplot(3,2,5)
 
         for k in range(0,Nzk):
-            textstr[k] = '\n'.join((textstr[k],r'$\mathrm{upper}=%.2f$' % (f.res.channel0.zernike_coeff_phase[0][indz[k]], ),
-                                    r'$\mathrm{lower}=%.2f$' % (f.res.channel0.zernike_coeff_phase[1][indz[k]], )))
+            textstr[k] = '\n'.join((textstr[k],r'$\mathrm{upper}=%.2f$' % (res.channel0.zernike_coeff_phase[0][indz[k]], ),
+                                    r'$\mathrm{lower}=%.2f$' % (res.channel0.zernike_coeff_phase[1][indz[k]], )))
 
         for i in range(0,Nchannel):
-            zcoeff_mag = f.res['channel'+str(i)].zernike_coeff_mag
-            zcoeff_phase = f.res['channel'+str(i)].zernike_coeff_phase
+            zcoeff_mag = res['channel'+str(i)].zernike_coeff_mag
+            zcoeff_phase = res['channel'+str(i)].zernike_coeff_phase
             line, = ax1.plot(zcoeff_mag[0],'.-')
             ax2.plot(zcoeff_phase[0],'.-')
             ax2.set_ylim((-0.6,0.6))
@@ -341,18 +341,18 @@ def showzernike(f,p,index=None):
                     transform=ax5.transAxes, horizontalalignment='left',verticalalignment='top')
         ax5.set_axis_off()
 
-        aperture=np.float32(np.abs(f.res.channel0.pupil1)>0.0)
-        Zk = f.res.channel0.zernike_polynomial
+        aperture=np.float32(np.abs(res.channel0.pupil1)>0.0)
+        Zk = res.channel0.zernike_polynomial_basis
         fig = plt.figure(figsize=[20,8])
         for i in range(0,Nchannel):
             ax = fig.add_subplot(2,4,i+1)
-            pupil_mag = np.sum(Zk*f.res['channel'+str(i)].zernike_coeff_mag[0].reshape((-1,1,1)),axis=0)*aperture
+            pupil_mag = np.sum(Zk*res['channel'+str(i)].zernike_coeff_mag[0].reshape((-1,1,1)),axis=0)*aperture
             plt.imshow(pupil_mag,interpolation='nearest')
             plt.axis('off')
             plt.title('upper pupil magnitude ' + str(i),fontsize=20)
             plt.colorbar()
             ax = fig.add_subplot(2,4,i+5)
-            pupil_mag = np.sum(Zk*f.res['channel'+str(i)].zernike_coeff_mag[1].reshape((-1,1,1)),axis=0)*aperture
+            pupil_mag = np.sum(Zk*res['channel'+str(i)].zernike_coeff_mag[1].reshape((-1,1,1)),axis=0)*aperture
             plt.imshow(pupil_mag,interpolation='nearest')
             plt.axis('off')
             plt.title('lower pupil magnitude ' + str(i),fontsize=20)
@@ -360,13 +360,13 @@ def showzernike(f,p,index=None):
         fig = plt.figure(figsize=[20,8])
         for i in range(0,Nchannel):
             ax = fig.add_subplot(2,4,i+1)
-            pupil_phase = np.sum(Zk[4:]*f.res['channel'+str(i)].zernike_coeff_phase[0][4:].reshape((-1,1,1)),axis=0)*aperture
+            pupil_phase = np.sum(Zk[4:]*res['channel'+str(i)].zernike_coeff_phase[0][4:].reshape((-1,1,1)),axis=0)*aperture
             plt.imshow(pupil_phase,interpolation='nearest')
             plt.axis('off')
             plt.title('upper pupil phase ' + str(i),fontsize=20)
             plt.colorbar()
             ax = fig.add_subplot(2,4,i+5)
-            pupil_phase = np.sum(Zk[4:]*f.res['channel'+str(i)].zernike_coeff_phase[1][4:].reshape((-1,1,1)),axis=0)*aperture
+            pupil_phase = np.sum(Zk[4:]*res['channel'+str(i)].zernike_coeff_phase[1][4:].reshape((-1,1,1)),axis=0)*aperture
             plt.imshow(pupil_phase,interpolation='nearest')
             plt.axis('off')
             plt.title('lower pupil phase ' + str(i),fontsize=20)
@@ -375,24 +375,24 @@ def showzernike(f,p,index=None):
     return
 
 
-def showzernikemap(f,p,index=None):
+def showzernikemap(res, rois, p, index=None):
     if p.channeltype == 'single':
-        zmap = f.res.zernike_map
-        zcoeff = f.res.zernike_coeff
-        pupil = f.res.pupil
-        Zk = f.res.zernike_polynomial
-        zernikemap(f,index,zmap,zcoeff,pupil,Zk)
+        zmap = res.zernike_map
+        zcoeff = res.zernike_coefficients
+        pupil = res.pupil
+        Zk = res.zernike_polynomial_basis
+        zernikemap(rois, index, zmap, zcoeff, pupil, Zk)
     if p.channeltype == 'multi':
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         for i in range(0,Nchannel):
             print('channel '+str(i))
-            zmap = f.res['channel'+str(i)].zernike_map
-            zcoeff = f.res['channel'+str(i)].zernike_coeff
-            pupil = f.res['channel'+str(i)].pupil
-            Zk = f.res['channel'+str(i)].zernike_polynomial
-            zernikemap(f,index,zmap,zcoeff,pupil,Zk)
+            zmap = res['channel'+str(i)].zernike_map
+            zcoeff = res['channel'+str(i)].zernike_coefficients
+            pupil = res['channel'+str(i)].pupil
+            Zk = res['channel'+str(i)].zernike_polynomial_basis
+            zernikemap(rois, index, zmap, zcoeff, pupil, Zk)
 
-def zernikemap(f,index,zmap,zcoeff,pupil,Zk):
+def zernikemap(rois, index, zmap, zcoeff, pupil, Zk):
 
     if index is None:
         index = [4,5,6,7,10,11,12,15,16,21]
@@ -419,7 +419,7 @@ def zernikemap(f,index,zmap,zcoeff,pupil,Zk):
         aperture=np.float32(np.abs(pupil[0])>0.0)
     else:
         aperture=np.float32(np.abs(pupil)>0.0)
-    imsz = np.array(f.rois.image_size)
+    imsz = np.array(rois.full_image_size)
 
 
     scale = (imsz[-2:]-1)/(np.array(zmap.shape[-2:])-1)
@@ -459,29 +459,29 @@ def zernikemap(f,index,zmap,zcoeff,pupil,Zk):
         plt.colorbar()
     plt.show()
 
-def showpsfvsdata(f,p,index):
-    psf_data = f.rois.psf_data
-    psf_fit = f.rois.psf_fit
+def showpsfvsdata(res, rois, p, index):
+    measured_images = rois.measured_roi_images
+    modeled_images = rois.modeled_roi_images
     if p.channeltype == 'single':
-        im1 = psf_data[index]
-        im2 = psf_fit[index]
+        im1 = measured_images[index]
+        im2 = modeled_images[index]
         psfcompare(im1,im2,p.pixel_size.z)
     else:
-        Nchannel = psf_data.shape[0]
+        Nchannel = measured_images.shape[0]
         for ch in range(0,Nchannel):
             if p.channeltype == '4pi':
-                im1 = psf_data[ch,index,0]
-                im2 = psf_fit[ch,index,0]
+                im1 = measured_images[ch,index,0]
+                im2 = modeled_images[ch,index,0]
             else:
-                im1 = psf_data[ch,index]
-                im2 = psf_fit[ch,index]
+                im1 = measured_images[ch,index]
+                im2 = modeled_images[ch,index]
             print('channel '+str(ch))
             psfcompare(im1,im2,p.pixel_size.z)
     try:
-        cor = f.res.cor
+        cor = res.selected_roi_centers
     except:
-        cor = f.res.channel1.cor
-    imsz = f.rois.image_size
+        cor = res.channel1.selected_roi_centers
+    imsz = rois.full_image_size
     fig = plt.figure(figsize=[4,4])
     plt.plot(cor[index,-1],cor[index,-2],'ro')
     plt.xlim(0,imsz[-1])
@@ -520,31 +520,31 @@ def psfcompare(im1,im2,pz):
     return
 
 
-def showpsfvsdata_insitu(f,p):
+def showpsfvsdata_insitu(res, rois, p):
     if p.channeltype == 'single':
-        rois = f.rois.psf_data
-        I_model = f.res.I_model
-        zf = f.res.pos[:,0]
+        measured_images = rois.measured_roi_images
+        I_model = res.psf_model_image
+        zf = res.fitted_positions[:,0]
         Nz = I_model.shape[0]
-        edge = np.real(f.res.zoffset)+range(0,Nz+1)
+        edge = np.real(res.zoffset)+range(0,Nz+1)
         ind = np.digitize(zf,edge.flatten())
         rois_avg = np.zeros(I_model.shape)
         for ii in range(1,Nz+1):
             mask = (ind==ii)
             if sum(mask)>0:
-                rois_avg[ii-1] = np.mean(rois[mask],axis=0)
+                rois_avg[ii-1] = np.mean(measured_images[mask],axis=0)
 
         psfcompare(rois_avg,I_model,p.pixel_size.z)
 
     else:
-        Nchannel = f.rois.psf_data.shape[0]
-        zoffset = f.res.channel0.zoffset
+        Nchannel = rois.measured_roi_images.shape[0]
+        zoffset = res.channel0.zoffset
         for ch in range(0,Nchannel):
-            rois = f.rois.psf_data[ch]
-            I_model = f.res['channel'+str(ch)].I_model
+            measured_images = rois.measured_roi_images[ch]
+            I_model = res['channel'+str(ch)].psf_model_image
             if p.channeltype == '4pi':
-                I_model = f.res['channel'+str(ch)].psf_model
-            zf = f.res.channel0.pos[:,0]
+                I_model = res['channel'+str(ch)].psf_model_image
+            zf = res.channel0.fitted_positions[:,0]
             Nz = I_model.shape[0]
             edge = np.real(zoffset)+range(0,Nz+1)
             ind = np.digitize(zf,edge.flatten())
@@ -552,17 +552,17 @@ def showpsfvsdata_insitu(f,p):
             for ii in range(1,Nz+1):
                 mask = (ind==ii)
                 if sum(mask)>0:
-                    rois_avg[ii-1] = np.mean(rois[mask],axis=0)
+                    rois_avg[ii-1] = np.mean(measured_images[mask],axis=0)
             print('channel '+str(ch))
             psfcompare(rois_avg,I_model,p.pixel_size.z)
 
     return
 
-def showlocalization(f,p):
-    loc = f.locres.loc
+def showlocalization(locres, p):
+    loc = locres.localized_positions
     plotlocbias(loc,p)
-    if hasattr(f.locres,'loc_FD'):
-        loc = f.locres.loc_FD
+    if hasattr(locres,'fourier_domain_positions'):
+        loc = locres.fourier_domain_positions
         plotlocbias(loc,p)
     return
 
@@ -592,10 +592,10 @@ def plotlocbias(loc,p):
     plt.show()
     return
 
-def showtransform(f):
-    Nchannel = f.rois.psf_data.shape[0]
-    ref_pos = f.res.channel0.pos
-    dxy = f.res.xyshift
+def showtransform(res, rois):
+    Nchannel = rois.measured_roi_images.shape[0]
+    ref_pos = res.channel0.fitted_positions
+    dxy = res.xyshift
     fig = plt.figure(figsize=[5*Nchannel,10])
     spec = gridspec.GridSpec(ncols=Nchannel, nrows=2,
                         width_ratios=list(np.ones(Nchannel)), wspace=0.3,
@@ -604,23 +604,23 @@ def showtransform(f):
     cor_ref = np.concatenate((ref_pos[:,1:], np.ones((ref_pos.shape[0], 1))), axis=1)
 
     for i in range(1,Nchannel):
-        pos = f.res['channel'+str(i)].pos
+        pos = res['channel'+str(i)].fitted_positions
         if Nchannel<3:
-            cor_target = np.matmul(cor_ref-f.res.imgcenter, f.res.T)[..., :-1]+f.res.imgcenter[:-1]
+            cor_target = np.matmul(cor_ref-res.imgcenter, res.T)[..., :-1]+res.imgcenter[:-1]
         else:
-            cor_target = np.matmul(cor_ref-f.res.imgcenter, f.res.T[i-1])[..., :-1]+f.res.imgcenter[:-1]
+            cor_target = np.matmul(cor_ref-res.imgcenter, res.T[i-1])[..., :-1]+res.imgcenter[:-1]
 
         ax = fig.add_subplot(spec[i])
         plt.plot(ref_pos[:,-1],ref_pos[:,-2],'.')
         plt.plot(pos[:,-1]-dxy[i][-1],pos[:,-2]-dxy[i][-2],'o',markersize = 8,mfc='none')
-        plt.plot(f.res.imgcenter[1],f.res.imgcenter[0],'*')
+        plt.plot(res.imgcenter[1],res.imgcenter[0],'*')
         ax.set_xlabel('x (pixel)')
         ax.set_ylabel('y (pixel)')
         plt.title('channel'+str(i))
         ax1 = fig.add_subplot(spec[Nchannel+i])
         plt.plot(cor_target[:,-1],cor_target[:,-2],'.')
         plt.plot(pos[:,-1],pos[:,-2],'o',markersize = 8,mfc='none')
-        plt.plot(f.res.imgcenter[1],f.res.imgcenter[0],'*')
+        plt.plot(res.imgcenter[1],res.imgcenter[0],'*')
         ax1.set_xlabel('x (pixel)')
         ax1.set_ylabel('y (pixel)')
 
@@ -629,17 +629,17 @@ def showtransform(f):
     ax1.legend(['ref_trans','target','center'])
 
 
-def showpsf(f,p):
+def showpsf(res, rois, p):
     if p.channeltype == 'single':
-        im1 = f.res.I_model
+        im1 = res.psf_model_image
         psfdisp(im1,p.pixel_size.z)
     else:
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         for ch in range(0,Nchannel):
             if p.channeltype == '4pi':
-                im1 = f.res['channel'+str(ch)].psf_model
+                im1 = res['channel'+str(ch)].psf_model_image
             else:
-                im1 = f.res['channel'+str(ch)].I_model
+                im1 = res['channel'+str(ch)].psf_model_image
             print('channel '+str(ch))
             psfdisp(im1,p.pixel_size.z)
     return
@@ -667,11 +667,11 @@ def psfdisp(im1,pz):
     return
 
 
-def showcoord(f,p):
+def showcoord(res, rois, p):
     if p.channeltype == 'single':
         fig = plt.figure(figsize=[5,5])
-        cor = f.res.cor
-        cor_all = f.res.cor_all
+        cor = res.selected_roi_centers
+        cor_all = res.all_roi_centers
 
         plt.plot(cor_all[:,-1],cor_all[:,-2],'.')
         plt.plot(cor[:,-1],cor[:,-2],'o',markersize = 8,mfc='none')
@@ -680,15 +680,15 @@ def showcoord(f,p):
 
         plt.legend(['all','selected'])
     else:
-        Nchannel = f.rois.psf_data.shape[0]
+        Nchannel = rois.measured_roi_images.shape[0]
         fig = plt.figure(figsize=[5*Nchannel,5])
         spec = gridspec.GridSpec(ncols=Nchannel, nrows=1,
                             width_ratios=list(np.ones(Nchannel)), wspace=0.3,
                             hspace=0.2, height_ratios=[1])
 
         for i in range(0,Nchannel):
-            cor = f.res['channel'+str(i)].cor
-            cor_all = f.res['channel'+str(i)].cor_all
+            cor = res['channel'+str(i)].selected_roi_centers
+            cor_all = res['channel'+str(i)].all_roi_centers
 
             ax = fig.add_subplot(spec[i])
             plt.plot(cor_all[:,-1],cor_all[:,-2],'.')
