@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import MISSING, asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, List, Optional, Union
 import os
@@ -255,131 +255,78 @@ def combine(
 
 def _dictconfig_to_params(cfg: DictConfig) -> RunParameters:
     """Convert a merged DictConfig into a :class:`RunParameters`."""
-    return RunParameters(
-        datapath=cfg.get("datapath", ""),
-        keyword=cfg.get("keyword", "Default."),
-        savename=cfg.get("savename", ""),
-        subfolder=cfg.get("subfolder", ""),
-        format=cfg.get("format", ".tif"),
-        stage_mov_dir=cfg.get("stage_mov_dir", "normal"),
-        gain=cfg.get("gain", 0.2),
-        ccd_offset=cfg.get("ccd_offset", 398.6),
-        roi=RoiParams(
-            roi_size=list(cfg.roi.get("roi_size", [21, 21])),
-            gauss_sigma=list(cfg.roi.get("gauss_sigma", [2, 2])),
-            max_kernel=list(cfg.roi.get("max_kernel", [3, 3])),
-            peak_height=float(cfg.roi.get("peak_height", 0.2)),
-            max_bead_number=int(cfg.roi.get("max_bead_number", 40)),
-            bead_radius=float(cfg.roi.get("bead_radius", 0.0)),
-        ),
-        pixel_size=PixelSizeParams(
-            x=float(cfg.pixel_size.get("x", 0.127)),
-            y=float(cfg.pixel_size.get("y", 0.116)),
-            z=float(cfg.pixel_size.get("z", 0.05)),
-        ),
-        FOV=FOVParams(
-            y_center=int(cfg.FOV.get("y_center", 0)),
-            x_center=int(cfg.FOV.get("x_center", 0)),
-            radius=int(cfg.FOV.get("radius", 0)),
-            z_start=int(cfg.FOV.get("z_start", 0)),
-            z_end=int(cfg.FOV.get("z_end", 0)),
-            z_step=int(cfg.FOV.get("z_step", 1)),
-        ),
-        dual=DualParams(
-            mirrortype=str(cfg.dual.get("mirrortype", "up-down")),
-            channel_arrange=str(cfg.dual.get("channel_arrange", "up-down")),
-        ),
-        multi=MultiChannelParams(
-            channel_size=list(cfg.multi.get("channel_size", [])),
-        ),
-        fpi=FpiParams(
-            modulation_period=float(cfg.fpi.get("modulation_period", 0.26)),
-        ),
-        LLS=LLSParams(
-            skew_const=list(cfg.LLS.get("skew_const", [0, 0])),
-        ),
-        insitu=InsituParams(
-            frame_range=list(cfg.insitu.get("frame_range", [0, 3000])),
-        ),
-        option=OptionParams(
-            imaging=ImagingParams(
-                emission_wavelength=float(cfg.option.imaging.get("emission_wavelength", 0.68)),
-                NA=float(cfg.option.imaging.get("NA", 1.43)),
-                RI=RefractiveIndices(
-                    imm=float(cfg.option.imaging.RI.get("imm", 1.516)),
-                    med=float(cfg.option.imaging.RI.get("med", 1.335)),
-                    cov=float(cfg.option.imaging.RI.get("cov", 1.516)),
-                ),
-            ),
-            insitu=InsituOptionParams(
-                stage_pos=float(cfg.option.insitu.get("stage_pos", 1)),
-                min_photon=float(cfg.option.insitu.get("min_photon", 0.4)),
-                partition_data=bool(cfg.option.insitu.get("partition_data", True)),
-                partition_size=list(cfg.option.insitu.get("partition_size", [21, 100])),
-                zernike_index=list(cfg.option.insitu.get("zernike_index", [5])),
-                zernike_coeff=list(cfg.option.insitu.get("zernike_coeff", [0.5])),
-                z_range=float(cfg.option.insitu.get("z_range", 2.0)),
-                zkorder_rank=str(cfg.option.insitu.get("zkorder_rank", "L")),
-                var_stagepos=bool(cfg.option.insitu.get("var_stagepos", True)),
-                repeat=int(cfg.option.insitu.get("repeat", 2)),
-                backgroundROI=list(cfg.option.insitu.get("backgroundROI", [])),
-            ),
-            fpi=FpiOptionParams(
-                link_zernikecoeff=bool(cfg.option.fpi.get("link_zernikecoeff", True)),
-                phase_dm=list(cfg.option.fpi.get("phase_dm", [2, 0, -2])),
-                sampleheight=int(cfg.option.fpi.get("sampleheight", 2)),
-                var_sampleheight=bool(cfg.option.fpi.get("var_sampleheight", False)),
-                phase_delay_dir=str(cfg.option.fpi.get("phase_delay_dir", "descend")),
-            ),
-            multi=MultiOptionParams(
-                defocus_offset=float(cfg.option.multi.get("defocus_offset", 0)),
-                defocus_delay=float(cfg.option.multi.get("defocus_delay", -0.0)),
-            ),
-            model=ModelParams(
-                pupilsize=int(cfg.option.model.get("pupilsize", 64)),
-                n_max=int(cfg.option.model.get("n_max", 8)),
-                zernike_nl=list(cfg.option.model.get("zernike_nl", [])),
-                blur_sigma=float(cfg.option.model.get("blur_sigma", 0.5)),
-                var_blur=bool(cfg.option.model.get("var_blur", True)),
-                with_apoid=bool(cfg.option.model.get("with_apoid", True)),
-                const_pupilmag=bool(cfg.option.model.get("const_pupilmag", False)),
-                symmetric_mag=bool(cfg.option.model.get("symmetric_mag", False)),
-                with_IMM=bool(cfg.option.model.get("with_IMM", False)),
-                init_pupil_file=str(cfg.option.model.get("init_pupil_file", "")),
-                estimate_drift=bool(cfg.option.model.get("estimate_drift", False)),
-                var_photon=bool(cfg.option.model.get("var_photon", False)),
-                bin=int(cfg.option.model.get("bin", 2)),
-                division=int(cfg.option.model.get("division", 40)),
-            ),
-        ),
-        PSFtype=str(cfg.get("PSFtype", "insitu_zernike")),
-        channeltype=str(cfg.get("channeltype", "single")),
-        datatype=str(cfg.get("datatype", "smlm")),
-        loss_weight=LossWeightParams(
-            mse1=int(cfg.loss_weight.get("mse1", 1)),
-            mse2=int(cfg.loss_weight.get("mse2", 1)),
-            smooth=int(cfg.loss_weight.get("smooth", 0)),
-            edge=float(cfg.loss_weight.get("edge", 0.01)),
-            psf_min=int(cfg.loss_weight.get("psf_min", 1)),
-            bg_min=int(cfg.loss_weight.get("bg_min", 1)),
-            photon_min=int(cfg.loss_weight.get("photon_min", 1)),
-            Inorm=int(cfg.loss_weight.get("Inorm", 0)),
-            gxy_min=int(cfg.loss_weight.get("gxy_min", 10)),
-        ),
-        rej_threshold=RejThresholdParams(
-            bias_z=float(cfg.rej_threshold.get("bias_z", 0.99)),
-            mse=float(cfg.rej_threshold.get("mse", 0.8)),
-            photon=float(cfg.rej_threshold.get("photon", 1.5)),
-        ),
-        usecuda=bool(cfg.get("usecuda", True)),
-        plotall=bool(cfg.get("plotall", False)),
-        ref_channel=int(cfg.get("ref_channel", 0)),
-        batch_size=int(cfg.get("batch_size", 1600)),
-        iteration=int(cfg.get("iteration", 200)),
-        varname=str(cfg.get("varname", "")),
-        filelist=list(cfg.get("filelist", [])),
-        swapxy=bool(cfg.get("swapxy", False)),
-    )
+    return _from_dataclass_cfg(RunParameters, cfg)
+
+
+def _from_dataclass_cfg(cls, cfg):
+    """Recursively construct a dataclass *cls* from a DictConfig *cfg*.
+
+    For each field in *cls*:
+    - If the field type is itself a dataclass, recurse.
+    - Otherwise, coerce the value from *cfg* to the declared type,
+      falling back to the field default if the key is missing.
+    """
+    kwargs = {}
+    cfg_map = cfg if isinstance(cfg, _MappingTypes) else {}
+
+    for f in fields(cls):
+        raw = cfg_map.get(f.name) if isinstance(cfg_map, _MappingTypes) else None
+        ftype = f.type
+
+        if isinstance(ftype, str):
+            ftype = _resolve_type(cls, ftype)
+
+        if raw is None:
+            if f.default is not MISSING:
+                kwargs[f.name] = f.default
+            elif f.default_factory is not MISSING:
+                kwargs[f.name] = f.default_factory()
+            else:
+                kwargs[f.name] = None
+            continue
+
+        if _is_dataclass_type(ftype):
+            nested_cfg = raw if isinstance(raw, _MappingTypes) else OmegaConf.create({})
+            kwargs[f.name] = _from_dataclass_cfg(ftype, nested_cfg)
+        else:
+            kwargs[f.name] = _coerce(ftype, raw)
+
+    return cls(**kwargs)
+
+
+def _is_dataclass_type(tp) -> bool:
+    try:
+        return issubclass(tp, object) and hasattr(tp, "__dataclass_fields__")
+    except TypeError:
+        return False
+
+
+def _resolve_type(cls, type_name: str):
+    """Resolve a forward-reference type string to the actual class
+    from the module where *cls* is defined."""
+    import sys
+    mod = sys.modules.get(cls.__module__, None)
+    if mod is not None and hasattr(mod, type_name):
+        return getattr(mod, type_name)
+    return None
+
+
+def _coerce(ftype, value):
+    """Coerce *value* to *ftype*, handling common OmegaConf types."""
+    if ftype in (int, float, str, bool):
+        return ftype(value)
+    if ftype is list:
+        return list(value)
+    if ftype is Optional:
+        return value
+    origin = getattr(ftype, "__origin__", None)
+    if origin is list:
+        return list(value)
+    if origin is Union:
+        args = [a for a in getattr(ftype, "__args__", ()) if a is not type(None)]
+        if args:
+            return _coerce(args[0], value)
+    return value
 
 
 def _redefine(baseparam: DictConfig, userparam: DictConfig) -> DictConfig:

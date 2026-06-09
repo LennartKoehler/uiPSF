@@ -13,6 +13,7 @@ from skimage import io
 # append the path of the parent directory as long as it's not a real package
 import glob
 import json
+import logging
 import warnings
 from PIL import Image
 from typing import Any, List
@@ -123,7 +124,7 @@ class TiffDataLoader(DataLoader):
         param = self.param
         imageraw = []
         for filename in filelist:
-            print(filename)
+            logging.info("Loading: %s", filename)
             if param.datatype == 'smlm':
                 dat = []
                 fID = Image.open(filename)
@@ -157,7 +158,7 @@ class MatDataLoader(DataLoader):
         param = self.param
         imageraw = []
         for filename in filelist:
-            print(filename)
+            logging.info("Loading: %s", filename)
             fdata = h5.File(filename,'r')
             if param.varname:
                 name = [param.varname]

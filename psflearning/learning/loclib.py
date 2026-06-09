@@ -11,6 +11,7 @@ import ctypes
 import numpy.ctypeslib as ctl
 import numpy as np
 import h5py as h5
+import logging
 from .utilities import psf2cspline_np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -112,7 +113,7 @@ class localizationlib:
             lib_cpu_4pi = ctypes.CDLL(dllpath_cpu_4pi)
             lib_cpu_ast = ctypes.CDLL(dllpath_cpu_ast)
         except OSError:
-            print('MLE CPU fitting is not available')
+            logging.warning('MLE CPU fitting is not available')
 
 
 

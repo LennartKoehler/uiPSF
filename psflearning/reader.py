@@ -5,6 +5,7 @@ state, and previously saved results.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -56,7 +57,7 @@ class Reader:
         images = self._swap_xy(images, param)
         images = self._flip_if_reverse(images, param)
 
-        print(images.shape)
+        logging.info("Loaded images shape: %s", images.shape)
         return images
 
     # ── Parameter loading ────────────────────────────────────────────────

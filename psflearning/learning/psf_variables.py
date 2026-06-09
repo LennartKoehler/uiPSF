@@ -116,24 +116,11 @@ class PSFResult:
         "cor": "selected_roi_centers",
     }
 
+    def _own_field_names(self) -> set[str]:
+        return {f.name for f in fields(self) if f.name not in ("channels", "_BACKWARD_COMPAT_KEYS")}
+
     def to_dict(self) -> dict[str, Any]:
-        d = {
-            "fitted_positions": self.fitted_positions,
-            "fitted_backgrounds": self.fitted_backgrounds,
-            "fitted_intensities": self.fitted_intensities,
-            "psf_model_image_with_bead": self.psf_model_image_with_bead,
-            "psf_model_image": self.psf_model_image,
-            "pupil": self.pupil,
-            "zernike_coefficients": self.zernike_coefficients,
-            "gaussian_blur_sigma": self.gaussian_blur_sigma,
-            "drift_rate": self.drift_rate,
-            "psf_model_image_reversed": self.psf_model_image_reversed,
-            "model_image_offset": self.model_image_offset,
-            "zernike_polynomial_basis": self.zernike_polynomial_basis,
-            "apodization": self.apodization,
-            "all_roi_centers": self.all_roi_centers,
-            "selected_roi_centers": self.selected_roi_centers,
-        }
+        d = {f.name: getattr(self, f.name) for f in fields(self) if f.name not in ("channels", "_BACKWARD_COMPAT_KEYS")}
         if self.channels is not None:
             for name, ch in self.channels.items():
                 d[name] = ch.to_dict()
@@ -146,14 +133,7 @@ class PSFResult:
 
     def __getitem__(self, key: str) -> Any:
         resolved = self._resolve_key(key)
-        if resolved in (
-            "fitted_positions", "fitted_backgrounds", "fitted_intensities",
-            "psf_model_image_with_bead", "psf_model_image", "pupil",
-            "zernike_coefficients", "gaussian_blur_sigma", "drift_rate",
-            "psf_model_image_reversed", "model_image_offset",
-            "zernike_polynomial_basis", "apodization", "all_roi_centers",
-            "selected_roi_centers",
-        ):
+        if resolved in self._own_field_names():
             return getattr(self, resolved)
         if self.channels is not None and key in self.channels:
             return self.channels[key]
@@ -161,14 +141,7 @@ class PSFResult:
 
     def __contains__(self, key: str) -> bool:
         resolved = self._resolve_key(key)
-        if resolved in (
-            "fitted_positions", "fitted_backgrounds", "fitted_intensities",
-            "psf_model_image_with_bead", "psf_model_image", "pupil",
-            "zernike_coefficients", "gaussian_blur_sigma", "drift_rate",
-            "psf_model_image_reversed", "model_image_offset",
-            "zernike_polynomial_basis", "apodization", "all_roi_centers",
-            "selected_roi_centers",
-        ):
+        if resolved in self._own_field_names():
             return True
         if self.channels is not None and key in self.channels:
             return True

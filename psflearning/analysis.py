@@ -13,6 +13,8 @@ by :class:`~psflearning.plotter.Plotter`.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Optional, Tuple
 
 import numpy as np
@@ -239,7 +241,7 @@ def _strehl_single(p, f1, f, psf_info, xsz):
     )
 
     strehlratio = np.float32(I1 / I0)
-    print("Strehl ratio: ", strehlratio)
+    logging.info("Strehl ratio: %s", strehlratio)
     return strehlratio
 
 
@@ -268,7 +270,7 @@ def _strehl_multi(p, f1, psf_info, xsz):
         I0.append(psf_model_image[0, xsz // 2, xsz // 2] / np.sum(psf_model_image))
 
     strehlratio = np.float32(np.stack(I1) / np.stack(I0))
-    print("Strehl ratio: ", strehlratio)
+    logging.info("Strehl ratio: %s", strehlratio)
     return strehlratio
 
 
@@ -280,7 +282,7 @@ def _strehl_4pi(f):
             for i in range(n_channel)
         ]
     )
-    print("modulation depth: ", np.round(mdepth, 2))
+    logging.info("modulation depth: %s", np.round(mdepth, 2))
     return mdepth
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import tensorflow as tf
 
@@ -118,7 +120,7 @@ def remove_outliers(
         data.measured_roi_images)
     mask = get_mask(metric, minI, threshold)
     delete_id = np.where(~mask)
-    print('outlier id:', str(delete_id[0]))
+    logging.info('outlier id: %s', str(delete_id[0]))
 
     if not ((delete_id[0].size > 0) & (delete_id[0].size < mask.size)):
         return None
@@ -128,7 +130,7 @@ def remove_outliers(
     data.roi_centers = centers[mask, :]
     data.source_file_indices = file_idxs[mask]
     _, rois, _, _ = data.get_image_data()
-    print(f"rois shape channel : {rois.shape}")
+    logging.debug("rois shape channel : %s", rois.shape)
 
     return res.filter_by_mask(mask)
 

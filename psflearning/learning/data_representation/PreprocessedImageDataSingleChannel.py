@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 import h5py
@@ -222,7 +223,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         img, rois, cor, _ = self.get_image_data()
         self.roi_centers_all = cor
         self.image_size = img.shape
-        print(f"rois shape channel : {rois.shape}")
+        logging.debug("rois shape channel : %s", rois.shape)
 
         self.pixelsize_z = pixelsize_z
         self.pixelsize_x = pixelsize_x
@@ -242,7 +243,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             padsize[-3] = (np.int32(bead_radius//pixelsize_z),np.int32(bead_radius//pixelsize_z))
             roisL = np.pad(rois,tuple(padsize),mode='edge')
             self.measured_roi_images = roisL
-            print(f"padded rois shape channel : {roisL.shape}")
+            logging.debug("padded rois shape channel : %s", roisL.shape)
 
         # generate bead kernel
         if pixelsize_y is None:
@@ -277,7 +278,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.measured_roi_images = rois1
         self.skew_const = skew_const
         #self.rawrois = rois
-        print(f"deskewed rois shape channel : {rois1.shape}")
+        logging.debug("deskewed rois shape channel : %s", rois1.shape)
 
     def resetdata(self) -> None:
         raise NotImplementedError("resetdata is not yet implemented for PreprocessedImageDataSingleChannel")

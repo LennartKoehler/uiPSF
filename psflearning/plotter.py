@@ -8,6 +8,7 @@ customise the output.  No method calls ``plt.show()`` directly.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import List, Optional, Union
 
@@ -90,7 +91,7 @@ class Plotter:
                 )
                 pupil_paths = save_figs(figs, output_dir, "pupil", fmt, dpi)
             except Exception:
-                print("no pupil / zernike plot available")
+                logging.warning("no pupil / zernike plot available")
 
         fig = self.plot_learned_params(
             roi_centers=rois.roi_centers, fitted_positions=res.fitted_positions, intensity=res.fitted_intensities,
@@ -299,8 +300,8 @@ class Plotter:
 
             fig1 = _psf_display(im1, pixel_size_z)
             fig2 = _psf_display(im2, pixel_size_z)
-            figs.append(fig1).append(fig2)
-        return figs[0]
+            figs.extend([fig1, fig2])
+        return figs
 
     @staticmethod
     def plot_psf_vs_data_insitu(
@@ -344,7 +345,7 @@ class Plotter:
 
             fig1 = _psf_display(averaged_roi_images, pixel_size_z)
             fig2 = _psf_display(ch_I_model, pixel_size_z)
-            figs.append(fig1).append(fig2)
+            figs.extend([fig1, fig2])
         return figs
 
     # ── Localization ─────────────────────────────────────────────────────
