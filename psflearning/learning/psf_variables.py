@@ -45,14 +45,12 @@ class Positions:
 class PSFInfo:
     """PSF type registry entry.
 
-    Replaces the ``dict(psf_class=..., psf_class_multi=..., ...)`` returned
+    Replaces the ``dict(psf_class=..., ...)`` returned
     by ``psf_registry.get_psf_info()``.
     """
 
     psf_class: type
-    psf_class_multi: Optional[type]
     loss_fun: Callable
-    loss_fun_multi: Optional[Callable]
 
 
 # ── Optimization weights ───────────────────────────────────────────────
@@ -255,7 +253,7 @@ class ReportResult:
 
 @dataclass
 class ZernikeLossVariables:
-    """Variables for ``mse_real`` (7 elements)."""
+    """Variables for ``mse_real`` and ``mse_real_zernike`` (7 elements)."""
 
     positions: Any
     backgrounds: Any
@@ -275,230 +273,4 @@ class ZernikeLossVariables:
             zernike_phase=variables[4],
             sigma=variables[5],
             drift_xy=variables[6],
-        )
-
-
-@dataclass
-class Zernike4PiLossVariables:
-    """Variables for ``mse_real_4pi`` / ``mse_zernike_4pi`` (11 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    intensity_phase: Any
-    zernike_magnitude_1: Any
-    zernike_phase_1: Any
-    zernike_magnitude_2: Any
-    zernike_phase_2: Any
-    alpha: Any
-    wavelength: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> Zernike4PiLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            intensity_phase=variables[3],
-            zernike_magnitude_1=variables[4],
-            zernike_phase_1=variables[5],
-            zernike_magnitude_2=variables[6],
-            zernike_phase_2=variables[7],
-            alpha=variables[8],
-            wavelength=variables[9],
-            drift_xy=variables[10],
-        )
-
-
-@dataclass
-class PupilLossVariables:
-    """Variables for ``mse_real_pupil`` (7 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    pupil_real: Any
-    pupil_imag: Any
-    sigma: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> PupilLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            pupil_real=variables[3],
-            pupil_imag=variables[4],
-            sigma=variables[5],
-            drift_xy=variables[6],
-        )
-
-
-@dataclass
-class Pupil4PiLossVariables:
-    """Variables for ``mse_pupil_4pi`` (10 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    pupil_real_1: Any
-    pupil_imag_1: Any
-    pupil_real_2: Any
-    pupil_imag_2: Any
-    alpha: Any
-    wavelength: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> Pupil4PiLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            pupil_real_1=variables[3],
-            pupil_imag_1=variables[4],
-            pupil_real_2=variables[5],
-            pupil_imag_2=variables[6],
-            alpha=variables[7],
-            wavelength=variables[8],
-            drift_xy=variables[9],
-        )
-
-
-@dataclass
-class Zernike4PiSMLMLossVariables:
-    """Variables for ``mse_zernike_4pi_smlm`` (12 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    intensity_phase: Any
-    stage_position: Any
-    sample_height: Any
-    zernike_magnitude_1: Any
-    zernike_phase_1: Any
-    zernike_magnitude_2: Any
-    zernike_phase_2: Any
-    alpha: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> Zernike4PiSMLMLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            intensity_phase=variables[3],
-            stage_position=variables[4],
-            sample_height=variables[5],
-            zernike_magnitude_1=variables[6],
-            zernike_phase_1=variables[7],
-            zernike_magnitude_2=variables[8],
-            zernike_phase_2=variables[9],
-            alpha=variables[10],
-            drift_xy=variables[11],
-        )
-
-
-@dataclass
-class ZernikeFDLossVariables:
-    """Variables for ``mse_real_zernike_FD`` / ``mse_real_zernike_IMM`` (6 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    zernike_map: Any
-    sigma: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> ZernikeFDLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            zernike_map=variables[3],
-            sigma=variables[4],
-            drift_xy=variables[5],
-        )
-
-
-@dataclass
-class ZernikeFDSMLMLossVariables:
-    """Variables for ``mse_real_zernike_FD_smlm`` (7 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    zernike_map: Any
-    sigma: Any
-    stage_position: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> ZernikeFDSMLMLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            zernike_map=variables[3],
-            sigma=variables[4],
-            stage_position=variables[5],
-            drift_xy=variables[6],
-        )
-
-
-@dataclass
-class ZernikeSMLMLossVariables:
-    """Variables for ``mse_real_zernike_smlm`` (8 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    zernike_magnitude: Any
-    zernike_phase: Any
-    stage_position: Any
-    sigma: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> ZernikeSMLMLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            zernike_magnitude=variables[3],
-            zernike_phase=variables[4],
-            stage_position=variables[5],
-            sigma=variables[6],
-            drift_xy=variables[7],
-        )
-
-
-@dataclass
-class PupilSMLMLossVariables:
-    """Variables for ``mse_real_pupil_smlm`` (8 elements)."""
-
-    positions: Any
-    backgrounds: Any
-    intensities: Any
-    pupil_real: Any
-    pupil_imag: Any
-    stage_position: Any
-    sigma: Any
-    drift_xy: Any
-
-    @classmethod
-    def from_list(cls, variables: list) -> PupilSMLMLossVariables:
-        return cls(
-            positions=variables[0],
-            backgrounds=variables[1],
-            intensities=variables[2],
-            pupil_real=variables[3],
-            pupil_imag=variables[4],
-            stage_position=variables[5],
-            sigma=variables[6],
-            drift_xy=variables[7],
         )

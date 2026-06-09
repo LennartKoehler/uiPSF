@@ -8,11 +8,9 @@ import pytest
 from psflearning import io
 from psflearning.plotter import Plotter, save_figs
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 RESULT_FILE = PROJECT_ROOT / "example_data_for_uiPSF" / "1ch_40nm_bead" / "psfmodel_zernike_vector_single.h5"
 OUTPUT_DIR = PROJECT_ROOT / "test_output" / "plotter"
-
 
 def _load_result():
     if not RESULT_FILE.exists():
@@ -22,42 +20,36 @@ def _load_result():
         )
     return io.h5.load(RESULT_FILE)
 
-
 @pytest.fixture(scope="module")
 def data():
     f, p = _load_result()
     return f, p
 
-
 @pytest.fixture(scope="module")
 def plotter():
     return Plotter()
-
 
 @pytest.fixture(scope="module")
 def output_dir():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     return OUTPUT_DIR
 
-
 def test_plot_learned_params(plotter, data, output_dir):
     f, p = data
     fig = plotter.plot_learned_params(
         roi_centers=f.rois.roi_centers, fitted_positions=f.res.fitted_positions, intensity=f.res.fitted_intensities,
-        bg=f.res.fitted_backgrounds, drift_rate=f.res.drift_rate, channeltype=p.channeltype,
+        bg=f.res.fitted_backgrounds, drift_rate=f.res.drift_rate,
     )
     paths = save_figs(fig, str(output_dir), "learned_params")
     assert all(Path(pt).exists() for pt in paths)
 
-
 def test_plot_pupil(plotter, data, output_dir):
     f, p = data
     figs = plotter.plot_pupil(
-        f.res.pupil, channeltype=p.channeltype,
+        f.res.pupil,
     )
     paths = save_figs(figs, str(output_dir), "pupil")
     assert all(Path(pt).exists() for pt in paths)
-
 
 def test_plot_zernike(plotter, data, output_dir):
     f, p = data
@@ -67,28 +59,14 @@ def test_plot_zernike(plotter, data, output_dir):
     paths = save_figs(figs, str(output_dir), "zernike")
     assert all(Path(pt).exists() for pt in paths)
 
-
 def test_plot_psf_vs_data(plotter, data, output_dir):
     f, p = data
     fig = plotter.plot_psf_vs_data(
         f.rois.measured_roi_images, f.rois.modeled_roi_images,
-        channeltype=p.channeltype, pixel_size_z=p.pixel_size.z,
+        pixel_size_z=p.pixel_size.z,
         index=0,
     )
     paths = save_figs(fig, str(output_dir), "psf_vs_data")
-    assert all(Path(pt).exists() for pt in paths)
-
-
-def test_plot_psf_vs_data_insitu(plotter, data, output_dir):
-    f, p = data
-    try:
-        figs = plotter.plot_psf_vs_data_insitu(
-            f.rois.measured_roi_images, f.res.psf_model_image, f.res.fitted_positions, f.res.zoffset,
-            channeltype=p.channeltype, pixel_size_z=p.pixel_size.z,
-        )
-    except AttributeError:
-        pytest.skip("insitu plot not available for this result file")
-    paths = save_figs(figs, str(output_dir), "psf_vs_data_insitu")
     assert all(Path(pt).exists() for pt in paths)
 
 
@@ -101,20 +79,17 @@ def test_plot_localization(plotter, data, output_dir):
     paths = save_figs(fig, str(output_dir), "localization")
     assert all(Path(pt).exists() for pt in paths)
 
-
 def test_plot_coordinates(plotter, data, output_dir):
     f, p = data
     fig = plotter.plot_coordinates(f.res.selected_roi_centers, f.res.all_roi_centers)
     paths = save_figs(fig, str(output_dir), "coordinates")
     assert all(Path(pt).exists() for pt in paths)
 
-
 def test_plot_psf(plotter, data, output_dir):
     f, p = data
     figs = plotter.plot_psf(f.res.psf_model_image, pixel_size_z=p.pixel_size.z)
     paths = save_figs(figs, str(output_dir), "psf")
     assert all(Path(pt).exists() for pt in paths)
-
 
 def test_generate_report(plotter, data, output_dir):
     f, p = data

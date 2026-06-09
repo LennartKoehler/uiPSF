@@ -18,10 +18,7 @@ except ImportError:
 
 import numpy as np
 import scipy.ndimage as ndimage
-from scipy import cluster as cluster
-from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
-from scipy.spatial import distance
 
 
 def extractMultiPeaks(
@@ -73,59 +70,6 @@ def extractMultiPeaks(
         ROIs = None
     return ROIs, centers
 
-def extractMultiPeaks_smlm(
-    im: np.ndarray,
-    ROIsize: Sequence[int],
-    sigma: Sequence[float] | None = None,
-    threshold_rel: float | None = None,
-    alternateImg: np.ndarray | None = None,
-    kernel: tuple[int, ...] = (3, 3, 3),
-    borderDist: Sequence[int] | None = None,
-    min_dist: float | None = None,
-    FOV: Sequence[int] | None = None,
-) -> tuple[np.ndarray | None, np.ndarray]:
-    """
-    extracts ROIs around the local maxima in im after gaussian filtering
-    :param im: image to extract from
-    :param ROIsize: multidimensional size of the ROI to extract around each maximum. If fewer dimensions are given the others are not extracted and the original size is kept.
-    :param sigma: size of the Gaussian filter kernel
-    :param  threshold_abs, threshold_rel: absolute and relative thesholds to extract peaks
-    :param min_distance: minimum distance to keep around maxima
-    :return: tuple of (the n-dimensional ROIs stacked along an extra dimension and center coordinates)
-    """
-    if sigma is not None and np.linalg.norm(sigma) > 0:
-        im2 = gaussian_filter(im, list(np.array(sigma)*0.75))-gaussian_filter(im,sigma)
-    else:
-        im2 = im
-    coordinates = localMax(im2, threshold_rel=threshold_rel, kernel=kernel)
-    coordinates = np.array(coordinates)
-    if coordinates.size>0:
-        if borderDist is not None:        
-            borderDist = np.array(borderDist)
-            inBorder = np.all(coordinates-borderDist >= 0,axis=1) & np.all(im.shape - coordinates - borderDist >= 0, axis=1)
-            coordinates=coordinates[inBorder,:]
-            #values=values[inBorder]
-        if FOV is not None:        
-            fov = np.array(FOV)
-            #inFov = (coordinates[:,-1]>= fov[0]-fov[2]/2) & (coordinates[:,-1] <= fov[0]+fov[2]/2) & (coordinates[:,-2]>= fov[1]-fov[3]/2) & (coordinates[:,-2] <= fov[1]+fov[3]/2)
-            coord_r = (coordinates[:,-1]-fov[1])**2+(coordinates[:,-2]-fov[0])**2
-            inFov = coord_r<(fov[2]**2)
-            coordinates=coordinates[inFov,:]
-
-    if alternateImg is not None:
-        im = alternateImg
-    centers = np.round(coordinates).astype(np.int32)
-    if len(ROIsize) < centers.shape[-1]:
-        centers = centers[:,-len(ROIsize):]
-    if coordinates.size>0:
-        #if (min_dist is not None) & (centers.shape[0]>1):
-        #   centers = combine_close_cor(centers, min_dist)
-        #centers = np.array([[10,15]])
-        ROIs = multiROIExtract_smlm(im, centers, ROIsize=ROIsize)  # , origin="center"
-    else:
-        ROIs = None
-    return ROIs, centers
-    
 def localMax(
     img: np.ndarray,
     threshold_rel: float | None = None,
@@ -179,47 +123,6 @@ def multiROIExtract(
         listOfROIs.append(myROI)
     return np.stack(listOfROIs)
 
-
-def multiROIExtract_smlm(
-    im: np.ndarray,
-    centers: np.ndarray,
-    ROIsize: Sequence[int],
-) -> np.ndarray:
-    """Extract multiple ROIs using direct indexing and stack them along a new dimension.
-
-    :param im: image to extract from
-    :param centers: array of center coordinates for each ROI
-    :param ROIsize: multidimensional size of the ROI to extract
-    :return: the stacked extractions along a new leading dimension
-    """
-    listOfROIs = []
-    for centerpos in centers:
-        myROI = im[ROIcoords(centerpos, ROIsize, im.ndim)]
-        listOfROIs.append(myROI)
-    return np.stack(listOfROIs)
- 
-def combine_close_cor(
-    centers: np.ndarray,
-    min_dist: float,
-) -> np.ndarray:
-    """Combine center coordinates that are closer than min_dist using hierarchical clustering.
-
-    :param centers: array of center coordinates
-    :param min_dist: minimum distance threshold; clusters with linkage below this are merged
-    :return: array of averaged center coordinates, one per cluster
-    """
-    dis = distance.pdist(centers)
-    link = cluster.hierarchy.linkage(dis,'complete')
-    Tc = cluster.hierarchy.fcluster(link,t=min_dist,criterion ='distance')
-    cor = np.zeros((np.max(Tc),2),dtype=np.int32)
-    for t in range(0,np.max(Tc)):
-        maskT = (Tc==(t+1))
-        if np.sum(maskT)>1:
-            cor[t] = np.mean(centers[maskT],axis=0)
-        else:
-            cor[t] = centers[maskT]
-
-    return cor
 
 def extract(
     img: np.ndarray,

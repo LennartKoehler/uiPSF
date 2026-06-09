@@ -21,25 +21,10 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
     Class that handles preprocessed data for single-channel case.
     Provides access to images data (rois, centers, etc.) for fitter and psf classes.
     """
-    def __init__(self, images: Any, is4pi: bool | None = None) -> None:
-        # TODO: instead of using a boolean flag one could think of using a string
-        # this would allow for more options
-        # the question is if this makes sense or if it makes more sense to create a new class
-        # for other types of psfs
-        # here we used the flag since almost everything is identical, only the check function
-        # and the func_2Dimage are different
-        if is4pi is None or is4pi is False:
-            self.is4pi = False
-            self.num_dims = 4
-            self.dim_names = "images, z, y, x"
-            self.func_2Dimage = lambda ims: np.max(ims, axis=-3) # used in find_rois()
-        elif is4pi is True:
-            self.is4pi = True
-            self.num_dims = 5
-            self.dim_names = "images, phi, z, y, x"
-            self.func_2Dimage = lambda ims: np.max(ims[0], axis=0) # used in find_rois()
-        else:
-            raise ValueError("is4pi should be True or False.")
+    def __init__(self, images: Any) -> None:
+        self.num_dims = 4
+        self.dim_names = "images, z, y, x"
+        self.func_2Dimage = lambda ims: np.max(ims, axis=-3)
 
         self.images = None
         self.check_and_init_images(images) # check if input is valid
@@ -49,7 +34,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.rois_extracted = False
         self.min_border_dist = None # needed in cut_new_rois()
         self.skew_const = None
-        self.zT = None
         return
 
     def check_and_init_images(self, images: Any) -> None:
@@ -200,7 +184,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
             raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
 
     def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float,
-                min_center_dist: float | None = None, FOV: Any = None, modulation_period: float | None = None, padPSF: bool = True, plot: bool = True, isVolume: bool = True, pixelsize_y: float | None = None, skew_const: Any = None, max_bead_number: int | None = None) -> None:
+                min_center_dist: float | None = None, FOV: Any = None, padPSF: bool = True, plot: bool = True, isVolume: bool = True, pixelsize_y: float | None = None, skew_const: Any = None, max_bead_number: int | None = None) -> None:
         """
         Runs the full preprocessing pipeline including ROI finding, offset subtraction, and optional padding and deskewing.
         """
@@ -249,10 +233,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         if pixelsize_y is None:
             pixelsize_y = pixelsize_x
         self.pixelsize_y = pixelsize_y
-
-
-        if modulation_period is not None:
-            self.zT = modulation_period/pixelsize_z
 
         self.skew_const = skew_const
         if skew_const:

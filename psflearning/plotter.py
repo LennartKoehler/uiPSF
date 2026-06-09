@@ -58,7 +58,6 @@ class Plotter:
         fmt: str = "png",
         dpi: int = 150,
     ) -> ReportResult:
-        channeltype = p.channeltype
         pixel_size_z = p.pixel_size.z
 
         zernike_paths = None
@@ -66,7 +65,7 @@ class Plotter:
 
         fig = self.plot_psf_vs_data(
             rois.measured_roi_images, rois.modeled_roi_images,
-            channeltype=channeltype, pixel_size_z=pixel_size_z,
+            pixel_size_z=pixel_size_z,
             index=index,
         )
         psf_vs_data_paths = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
@@ -85,17 +84,14 @@ class Plotter:
             zernike_paths = save_figs(figs, output_dir, "zernike", fmt, dpi)
         except Exception:
             try:
-                n_channel = rois.measured_roi_images.shape[0] if channeltype != "single" else 1
-                figs = self.plot_pupil(
-                    res.pupil, channeltype=channeltype, n_channel=n_channel,
-                )
+                figs = self.plot_pupil(res.pupil)
                 pupil_paths = save_figs(figs, output_dir, "pupil", fmt, dpi)
             except Exception:
                 logging.warning("no pupil / zernike plot available")
 
         fig = self.plot_learned_params(
             roi_centers=rois.roi_centers, fitted_positions=res.fitted_positions, intensity=res.fitted_intensities,
-            bg=res.fitted_backgrounds, drift_rate=res.drift_rate, channeltype=channeltype,
+            bg=res.fitted_backgrounds, drift_rate=res.drift_rate,
         )
         learned_params_paths = save_figs(fig, output_dir, "learned_params", fmt, dpi)
 
@@ -120,17 +116,13 @@ class Plotter:
         intensity: np.ndarray,
         bg: np.ndarray,
         drift_rate: np.ndarray,
-        channeltype: str = "single",
     ) -> matplotlib.figure.Figure:
         photon = intensity.transpose()
-        if channeltype == "4pi":
-            phi = np.angle(intensity)
-            photon = np.abs(intensity.transpose())
 
         fig = plt.figure(figsize=[16, 8])
         spec = gridspec.GridSpec(
-            ncols=4, nrows=2,
-            width_ratios=[3, 3, 3, 3], wspace=0.4,
+            ncols=3, nrows=2,
+            width_ratios=[3, 3, 3], wspace=0.4,
             hspace=0.3, height_ratios=[4, 4],
         )
 
@@ -149,13 +141,7 @@ class Plotter:
         ax.set_xlabel("bead number")
         ax.set_ylabel("z (pixel)")
 
-        if channeltype == "4pi":
-            ax = fig.add_subplot(spec[3])
-            ax.plot(phi)
-            ax.set_xlabel("bead number")
-            ax.set_ylabel("phi (radian)")
-
-        ax = fig.add_subplot(spec[4])
+        ax = fig.add_subplot(spec[3])
         ax.plot(photon)
         if len(photon.shape) > 1:
             ax.set_xlabel("z slice")
@@ -164,73 +150,16 @@ class Plotter:
             ax.set_xlabel("bead number")
         ax.set_ylabel("photon")
 
-        ax = fig.add_subplot(spec[5])
+        ax = fig.add_subplot(spec[4])
         ax.plot(bg)
         ax.set_xlabel("bead number")
         ax.set_ylabel("background")
 
-        ax = fig.add_subplot(spec[6])
+        ax = fig.add_subplot(spec[5])
         ax.plot(drift_rate)
         ax.set_xlabel("bead number")
         ax.set_ylabel("drift per z slice (pixel)")
         ax.legend(["x", "y"])
-
-        return fig
-
-    @staticmethod
-    def plot_learned_params_insitu(
-        roi_centers: np.ndarray,
-        fitted_positions: np.ndarray,
-        intensity: np.ndarray,
-        bg: np.ndarray,
-        channeltype: str = "single",
-    ) -> matplotlib.figure.Figure:
-        photon = intensity
-        if channeltype == "4pi":
-            phi = np.angle(intensity)
-            photon = np.abs(intensity)
-
-        fig = plt.figure(figsize=[16, 8])
-        spec = gridspec.GridSpec(
-            ncols=4, nrows=2,
-            width_ratios=[3, 3, 3, 3], wspace=0.4,
-            hspace=0.3, height_ratios=[4, 4],
-        )
-
-        ax = fig.add_subplot(spec[0])
-        ax.plot(fitted_positions[:, 2] - roi_centers[:, 1], ".")
-        ax.set_xlabel("emitter number")
-        ax.set_ylabel("x (pixel)")
-
-        ax = fig.add_subplot(spec[1])
-        ax.plot(fitted_positions[:, 1] - roi_centers[:, 0], ".")
-        ax.set_xlabel("emitter number")
-        ax.set_ylabel("y (pixel)")
-
-        ax = fig.add_subplot(spec[2])
-        ax.plot(fitted_positions[:, 0], ".")
-        ax.set_xlabel("emitter number")
-        ax.set_ylabel("z (pixel)")
-
-        if channeltype == "4pi":
-            ax = fig.add_subplot(spec[3])
-            ax.plot(phi, ".")
-            ax.set_xlabel("emitter number")
-            ax.set_ylabel("phi (radian)")
-            ax = fig.add_subplot(spec[6])
-            ax.plot(fitted_positions[:, 0], phi, ".")
-            ax.set_xlabel("z (pixel)")
-            ax.set_ylabel("phi (radian)")
-
-        ax = fig.add_subplot(spec[4])
-        ax.plot(photon, ".")
-        ax.set_xlabel("emitter number")
-        ax.set_ylabel("photon")
-
-        ax = fig.add_subplot(spec[5])
-        ax.plot(bg, ".")
-        ax.set_xlabel("emitter number")
-        ax.set_ylabel("background")
 
         return fig
 
@@ -239,13 +168,9 @@ class Plotter:
     @staticmethod
     def plot_pupil(
         pupil: np.ndarray,
-        channeltype: str = "single",
-        n_channel: int = 1,
         index: Optional[int] = None,
-    ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
-        if channeltype == "single":
-            return _plot_pupil_single(pupil, index)
-        return plt.figure()
+    ) -> matplotlib.figure.Figure:
+        return _plot_pupil_single(pupil, index)
 
     # ── Zernike ──────────────────────────────────────────────────────────
 
@@ -277,76 +202,14 @@ class Plotter:
     def plot_psf_vs_data(
         measured_images: np.ndarray,
         modeled_images: np.ndarray,
-        channeltype: str = "single",
         pixel_size_z: float = 1.0,
         index: int = 0,
-    ) -> Tuple[matplotlib.figure.Figure,matplotlib.figure.Figure]:
-        if channeltype == "single":
-            im1 = measured_images[index]
-            im2 = modeled_images[index]
-            fig1 = _psf_display(im1, pixel_size_z)
-            fig2 = _psf_display(im2, pixel_size_z)
-            return fig1, fig2
-
-        n_channel = measured_images.shape[0]
-        figs = []
-        for ch in range(n_channel):
-            if channeltype == "4pi":
-                im1 = measured_images[ch, index, 0]
-                im2 = modeled_images[ch, index, 0]
-            else:
-                im1 = measured_images[ch, index]
-                im2 = modeled_images[ch, index]
-
-            fig1 = _psf_display(im1, pixel_size_z)
-            fig2 = _psf_display(im2, pixel_size_z)
-            figs.extend([fig1, fig2])
-        return figs
-
-    @staticmethod
-    def plot_psf_vs_data_insitu(
-        measured_roi_images: np.ndarray,
-        I_model: np.ndarray,
-        pos: np.ndarray,
-        zoffset: np.ndarray,
-        channeltype: str = "single",
-        pixel_size_z: float = 1.0,
-        n_channel: int = 1,
-    ) -> Union[matplotlib.figure.Figure, List[matplotlib.figure.Figure]]:
-        if channeltype == "single":
-            zf = pos[:, 0]
-            Nz = I_model.shape[0]
-            edge = np.real(zoffset) + range(0, Nz + 1)
-            ind = np.digitize(zf, np.array(edge).flatten())
-            averaged_roi_images = np.zeros(I_model.shape)
-            for ii in range(1, Nz + 1):
-                mask = ind == ii
-                if sum(mask) > 0:
-                    averaged_roi_images[ii - 1] = np.mean(measured_roi_images[mask], axis=0)
-            fig1 = _psf_display(averaged_roi_images, pixel_size_z)
-            fig2 = _psf_display(I_model, pixel_size_z)
-            return [fig1, fig2]
-
-        figs = []
-        for ch in range(n_channel):
-            ch_measured_roi_images = measured_roi_images[ch]
-            ch_I_model = I_model[ch]
-            if channeltype == "4pi":
-                ch_I_model = I_model[ch]
-            zf = pos[:, 0]
-            Nz = ch_I_model.shape[0]
-            edge = np.real(zoffset) + range(0, Nz + 1)
-            ind = np.digitize(zf, np.array(edge).flatten())
-            averaged_roi_images = np.zeros(ch_I_model.shape)
-            for ii in range(1, Nz + 1):
-                mask = ind == ii
-                if sum(mask) > 0:
-                    averaged_roi_images[ii - 1] = np.mean(ch_measured_roi_images[mask], axis=0)
-
-            fig1 = _psf_display(averaged_roi_images, pixel_size_z)
-            fig2 = _psf_display(ch_I_model, pixel_size_z)
-            figs.extend([fig1, fig2])
-        return figs
+    ) -> Tuple[matplotlib.figure.Figure, matplotlib.figure.Figure]:
+        im1 = measured_images[index]
+        im2 = modeled_images[index]
+        fig1 = _psf_display(im1, pixel_size_z)
+        fig2 = _psf_display(im2, pixel_size_z)
+        return fig1, fig2
 
     # ── Localization ─────────────────────────────────────────────────────
 
@@ -356,65 +219,6 @@ class Plotter:
         pixel_size,
     ) -> matplotlib.figure.Figure:
         return _plot_loc_bias(loc, pixel_size)
-
-    # ── Transform ────────────────────────────────────────────────────────
-
-    @staticmethod
-    def plot_transform(
-        ref_pos: np.ndarray,
-        positions: list,
-        xyshift: np.ndarray,
-        imgcenter: np.ndarray,
-        T: np.ndarray,
-        n_channel: int = 2,
-    ) -> matplotlib.figure.Figure:
-        fig = plt.figure(figsize=[5 * n_channel, 10])
-        spec = gridspec.GridSpec(
-            ncols=n_channel, nrows=2,
-            width_ratios=list(np.ones(n_channel)), wspace=0.3,
-            hspace=0.2, height_ratios=[1, 1],
-        )
-
-        cor_ref = np.concatenate(
-            (ref_pos[:, 1:], np.ones((ref_pos.shape[0], 1))), axis=1
-        )
-
-        for i in range(1, n_channel):
-            pos = positions[i]
-            if n_channel < 3:
-                cor_target = (
-                    np.matmul(cor_ref - imgcenter, T)[..., :-1]
-                    + imgcenter[:-1]
-                )
-            else:
-                cor_target = (
-                    np.matmul(cor_ref - imgcenter, T[i - 1])[..., :-1]
-                    + imgcenter[:-1]
-                )
-
-            ax = fig.add_subplot(spec[i])
-            ax.plot(ref_pos[:, -1], ref_pos[:, -2], ".")
-            ax.plot(
-                pos[:, -1] - xyshift[i][-1],
-                pos[:, -2] - xyshift[i][-2],
-                "o", markersize=8, mfc="none",
-            )
-            ax.plot(imgcenter[1], imgcenter[0], "*")
-            ax.set_xlabel("x (pixel)")
-            ax.set_ylabel("y (pixel)")
-            ax.set_title("channel" + str(i))
-
-            ax1 = fig.add_subplot(spec[n_channel + i])
-            ax1.plot(cor_target[:, -1], cor_target[:, -2], ".")
-            ax1.plot(pos[:, -1], pos[:, -2], "o", markersize=8, mfc="none")
-            ax1.plot(imgcenter[1], imgcenter[0], "*")
-            ax1.set_xlabel("x (pixel)")
-            ax1.set_ylabel("y (pixel)")
-
-        ax.legend(["ref", "target", "center"])
-        ax1.legend(["ref_trans", "target", "center"])
-
-        return fig
 
     # ── PSF display ──────────────────────────────────────────────────────
 

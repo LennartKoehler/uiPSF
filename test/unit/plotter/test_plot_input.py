@@ -12,7 +12,7 @@ output_dir = 'test_output'
 L = PSFLearningLib()
 
 # -- SETUP --
-param = io.param.combine('config_base', psftype='zernike', channeltype='1ch', sysfile='M2')
+param = io.param.combine('config_base', psftype='zernike', sysfile='M2')
 
 param.datapath = main_data_dir+'/1ch_40nm_bead/'
 param.savename = param.datapath+'psfmodel'
@@ -31,7 +31,7 @@ param.option.imaging.emission_wavelength = 0.6
 
 images = L.read_images(param)
 psf_info = L.get_psf_info(param)
-dataobj = L.prep_data(param, images)
+dataobj = L._prep_data(param, images)
 
 index: int = 1
 fig1 = L.plotter.plot_psf(dataobj.measured_roi_images[index], param.pixel_size.z)

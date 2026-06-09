@@ -143,7 +143,6 @@ class PSFInterface(ABC):
     defocus: Any
     psftype: str
     imgcenter: Any
-    sub_psfs: Any
     pupil_normalization_factor: Any
 
     @abstractmethod
@@ -386,37 +385,3 @@ class PSFInterface(ABC):
         psf_shift = tf.math.real(im.ifft2d(otf2d*shiftphase))
 
         return psf_shift
-
-    def psf2IAB(self, ROIs: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Convert PSF intensity measurements at three phases to IAB model components.
-        """
-        G = np.zeros(ROIs.shape, dtype = np.complex64)
-        G[:,0] = ROIs[:,0]*np.exp(-2*np.pi/3*1j)+ROIs[:,1]+ROIs[:,2]*np.exp(2*np.pi/3*1j)
-        G[:,1] = np.sum(ROIs,axis=1)
-        G[:,2] = ROIs[:,0]*np.exp(2*np.pi/3*1j)+ROIs[:,1]+ROIs[:,2]*np.exp(-2*np.pi/3*1j) # G[:,2] = np.conj(G[:,0])
-        # solving above equations for ROIs and redefine it as O
-        O = np.zeros(ROIs.shape, dtype = np.complex64)
-        O[:,0] = 1/3*(G[:,0]*np.exp(2*np.pi/3*1j)+G[:,1]+G[:,2]*np.exp(-2*np.pi/3*1j))
-        O[:,1] = 1/3*np.sum(G,axis=1)
-        O[:,2] = 1/3*(G[:,0]*np.exp(-2*np.pi/3*1j)+G[:,1]+G[:,2]*np.exp(2*np.pi/3*1j)) # O[:,2] = np.conj(O[:,0])
-        # above derivation is purely based on the definition of FFT and the fact that cos(2pi/3) and cos(4pi/3) are all equal to -0.5.
-        # it is true for PSF at any 3 phases, however, if the 3 phases are exactly at [-2pi/3, 0, 2pi/3], then G can be used to represent the complex IAB model, where
-        I = np.real(G[:,1])/3
-        A = G[:,0]/3
-        B = G[:,2]/3 # B = np.conj(A)
-
-        a = np.squeeze(np.sum(np.real(A[0]),axis = (-1,-2)))
-        b = np.squeeze(np.sum(np.imag(A[0]),axis = (-1,-2)))
-
-        y1 = np.squeeze(np.sum((ROIs[:,2]-ROIs[:,0])/np.sqrt(3),axis = (-1,-2)))
-        y2 = np.squeeze(np.sum(ROIs[:,1]-np.sum(ROIs,axis = 1)/3,axis = (-1,-2)))
-
-        q = np.squeeze(1j*(a*y1-b*y2) + (a*y2+b*y1))
-        if len(q.shape)>1:
-            phi = 1*np.median(np.angle(q),axis=1)
-        else:
-            phi = 1*np.median(np.angle(q))
-
-
-        return I, A, B, phi

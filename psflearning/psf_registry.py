@@ -1,9 +1,4 @@
 """
-Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
-All rights reserved
-
-@author: Sheng Liu
-
 Registry mapping PSF type strings to their implementation classes and
 corresponding loss functions.
 """
@@ -22,20 +17,15 @@ from .io.param import RunParameters
 
 
 def get_psf_info(param: Union[RunParameters, DictConfig]) -> PSFInfo:
-
-    """Resolve *param* into the concrete PSF class, multi-channel class,
-    loss function, and multi-channel loss function.
+    """Resolve *param* into the concrete PSF class and loss function.
 
     Returns
     -------
     PSFInfo
-        Typed container with ``psf_class``, ``psf_class_multi``,
-        ``loss_fun``, ``loss_fun_multi``.
+        Typed container with ``psf_class`` and ``loss_fun``.
     """
 
     return PSFInfo(
         psf_class=PSFZernikeBased,
-        psf_class_multi=None,
         loss_fun=mse_real_zernike,
-        loss_fun_multi=None,
     )

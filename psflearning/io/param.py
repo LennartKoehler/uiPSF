@@ -34,37 +34,6 @@ class ImagingParams:
 
 
 @dataclass
-class InsituOptionParams:
-    stage_pos: float = 1.0
-    min_photon: float = 0.4
-    partition_data: bool = True
-    partition_size: list = field(default_factory=lambda: [21, 100])
-    zernike_index: list = field(default_factory=lambda: [5])
-    zernike_coeff: list = field(default_factory=lambda: [0.5])
-    z_range: float = 2.0
-    zkorder_rank: str = "L"
-    var_stagepos: bool = True
-    repeat: int = 2
-    backgroundROI: list = field(default_factory=list)
-
-
-@dataclass
-class FpiOptionParams:
-    link_zernikecoeff: bool = True
-    phase_dm: list = field(default_factory=lambda: [2, 0, -2])
-    sampleheight: int = 2
-    var_sampleheight: bool = False
-    phase_delay_dir: str = "descend"
-
-
-@dataclass
-class MultiOptionParams:
-    defocus_offset: float = 0.0
-    defocus_delay: float = -0.0
-    defocus: Optional[list] = None
-
-
-@dataclass
 class ModelParams:
     pupilsize: int = 64
     n_max: int = 8
@@ -86,9 +55,6 @@ class ModelParams:
 @dataclass
 class OptionParams:
     imaging: ImagingParams = field(default_factory=ImagingParams)
-    insitu: InsituOptionParams = field(default_factory=InsituOptionParams)
-    fpi: FpiOptionParams = field(default_factory=FpiOptionParams)
-    multi: MultiOptionParams = field(default_factory=MultiOptionParams)
     model: ModelParams = field(default_factory=ModelParams)
 
 
@@ -124,29 +90,8 @@ class FOVParams:
 
 
 @dataclass
-class DualParams:
-    mirrortype: str = "up-down"
-    channel_arrange: str = "up-down"
-
-
-@dataclass
-class MultiChannelParams:
-    channel_size: list = field(default_factory=list)
-
-
-@dataclass
-class FpiParams:
-    modulation_period: float = 0.26
-
-
-@dataclass
 class LLSParams:
     skew_const: list = field(default_factory=lambda: [0, 0])
-
-
-@dataclass
-class InsituParams:
-    frame_range: list = field(default_factory=lambda: [0, 3000])
 
 
 @dataclass
@@ -193,20 +138,14 @@ class RunParameters:
     roi: RoiParams = field(default_factory=RoiParams)
     pixel_size: PixelSizeParams = field(default_factory=PixelSizeParams)
     FOV: FOVParams = field(default_factory=FOVParams)
-    dual: DualParams = field(default_factory=DualParams)
-    multi: MultiChannelParams = field(default_factory=MultiChannelParams)
-    fpi: FpiParams = field(default_factory=FpiParams)
     LLS: LLSParams = field(default_factory=LLSParams)
-    insitu: InsituParams = field(default_factory=InsituParams)
     option: OptionParams = field(default_factory=OptionParams)
-    PSFtype: str = "insitu_zernike"
-    channeltype: str = "single"
-    datatype: str = "smlm"
+    PSFtype: str = "zernike"
     loss_weight: LossWeightParams = field(default_factory=LossWeightParams)
     rej_threshold: RejThresholdParams = field(default_factory=RejThresholdParams)
     usecuda: bool = True
+    relearn: bool = True
     plotall: bool = False
-    ref_channel: int = 0
     batch_size: int = 1600
     iteration: int = 200
     varname: str = ""
@@ -214,7 +153,7 @@ class RunParameters:
     swapxy: bool = False
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return OmegaConf.to_container(OmegaConf.create(asdict(self)))
 
 
 # ── Construction from YAML ─────────────────────────────────────────────
@@ -223,10 +162,9 @@ class RunParameters:
 def combine(
     basefile: str,
     psftype: Optional[str] = None,
-    channeltype: Optional[str] = None,
     sysfile: Optional[str] = None,
 ) -> RunParameters:
-    """Load a base config and layer in psftype, channeltype, and
+    """Load a base config and layer in psftype and
     systemtype overrides, returning a typed :class:`RunParameters`."""
     thispath = os.path.dirname(os.path.abspath(__file__))
     pkgpath = os.path.dirname(os.path.dirname(thispath))
@@ -234,14 +172,9 @@ def combine(
     if psftype is not None:
         psfparam = load(pkgpath + "/config/psftype/" + psftype + ".yaml").Params
         fparam = _redefine(fparam, psfparam)
-    if channeltype is not None:
-        chparam = load(pkgpath + "/config/channeltype/" + channeltype + ".yaml").Params
-        fparam = _redefine(fparam, chparam)
     if sysfile is not None:
         sysparam = load(pkgpath + "/config/systemtype/" + sysfile + ".yaml").Params
         fparam = _redefine(fparam, sysparam)
-    if psftype == "zernike" and channeltype == "4pi":
-        fparam.PSFtype = "zernike"
     if psftype is not None and "insitu" in psftype:
         fparam.roi.gauss_sigma[-1] = max([4, fparam.roi.gauss_sigma[-1]])
         fparam.roi.gauss_sigma[-2] = max([4, fparam.roi.gauss_sigma[-2]])

@@ -32,11 +32,6 @@ class ZernikePSFResult:
     sigma: np.ndarray
     drift_xy: np.ndarray
     psf_model_image_reversed: np.ndarray
-    _variables: Optional[ZernikePSFVariables] = field(default=None, repr=False)
-
-    def filter_by_mask(self, mask: np.ndarray) -> ZernikePSFVariables:
-        assert self._variables is not None
-        return self._variables.filter_by_mask(mask)
 
 @dataclass
 class ZernikePSFVariables(LearnablePSFParameters):
@@ -146,7 +141,6 @@ class PSFZernikeBased(PSFZernikeBase):
         self.initial_pupil: Optional[Union[np.ndarray, list]] = None
         self.initial_psf_image: Optional[np.ndarray] = None
         self.initial_zernike_coefficients: Optional[np.ndarray] = None
-        self.initial_interference_amplitude: Optional[list] = None
         self.z_offset: Optional[np.ndarray] = None
         self.defocus = np.float32(0)
         self.default_loss_func = mse_real_zernike
@@ -397,8 +391,7 @@ class PSFZernikeBased(PSFZernikeBase):
             zernike_phase=zernike_coeff_phase,
             sigma=sigma,
             drift_xy=drift_xy * self.weight.drift,
-            psf_model_image_reversed=np.flip(psf_model_image, axis=-3),
-            _variables=variables,
+            psf_model_image_reversed=np.flip(psf_model_image, axis=-3)
         )
 
     def res2dict(self, res: ZernikePSFResult) -> PSFResult:
