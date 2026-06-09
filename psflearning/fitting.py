@@ -17,7 +17,7 @@ import numpy as np
 from .reader import Reader
 from omegaconf import DictConfig
 
-from .learning import PSFLearner, L_BFGS_B, LocalizationResult, remove_outliers_single
+from .learning import PSFLearner, L_BFGS_B, LocalizationResult, remove_outliers
 from .learning.psf_variables import PSFInfo
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.PSFInterface import PSFInterface
@@ -174,7 +174,7 @@ def relearn(
 
     locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
 
-    filtered_vars = remove_outliers_single(
+    filtered_vars = remove_outliers(
         data, fit_result, locres, forward_images, threshold,
     )
     if filtered_vars is not None:

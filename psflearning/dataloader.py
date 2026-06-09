@@ -44,7 +44,8 @@ class DataLoader(ABC):
             for f in folderlist:
                 filelist.append(glob.glob(f+'/*'+param.keyword+'*'+param.format)[0])
 
-        return filelist
+        return sorted(filelist)
+
 
     def getFileList(self) -> List[str]:
         """Deprecated alias for :meth:`get_file_list`."""

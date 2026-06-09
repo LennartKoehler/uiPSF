@@ -16,10 +16,23 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 import sys
-import tensorflow as tf
 from psflearning import io
 from dataclasses import dataclass
 from typing import Any
+
+
+def _cuda_available() -> bool:
+    """Check CUDA availability via the CUDA driver library, without TensorFlow."""
+    try:
+        if sys.platform.startswith('linux'):
+            ctypes.CDLL('libcuda.so.1')
+        elif sys.platform.startswith('win'):
+            ctypes.CDLL('nvcuda.dll')
+        else:
+            return False
+        return True
+    except OSError:
+        return False
 
 from .psf_variables import Positions
 
@@ -68,7 +81,7 @@ class localizationlib:
             dllpath_cpu_ast = pkgpath+cfg.Paths.spline.win.cpu.ast
             dllpath_gpu_ast = pkgpath+cfg.Paths.spline.win.cuda.ast
 
-            if tf.config.list_physical_devices('GPU'):
+            if _cuda_available():
                 lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)
                 lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)
                 lib_gpu_ast = ctypes.CDLL(dllpath_gpu_ast)
@@ -87,7 +100,7 @@ class localizationlib:
             dllpath_gpu_astM = pkgpath+cfg.Paths.spline.linux.cuda.astM
             dllpath_cpu_4pi = pkgpath+cfg.Paths.spline.linux.cpu.fpi
             dllpath_gpu_4pi = pkgpath+cfg.Paths.spline.linux.cuda.fpi
-            if tf.config.list_physical_devices('GPU'):
+            if _cuda_available():
                 lib_gpu_astM = ctypes.CDLL(dllpath_gpu_astM)
                 lib_gpu_4pi = ctypes.CDLL(dllpath_gpu_4pi)
                 lib_gpu_ast = ctypes.CDLL(dllpath_gpu_ast)

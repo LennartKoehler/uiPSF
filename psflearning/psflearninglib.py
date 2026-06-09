@@ -8,7 +8,7 @@ Main orchestrator for the PSF-learning pipeline.
 
 Delegates to focused sub-modules:
 
-* :class:`Reader`      – all input operations
+* :class:`Reader`      – image / parameter / result loading
 * :class:`Writer`      – all output operations
 * :class:`Plotter`     – all visualisations
 * :mod:`psf_registry`  – PSF type → class / loss-function look-up
@@ -68,6 +68,7 @@ from .learning.psfs.PSFInterface import PSFInterface
 from .learning.loclib import LocalizationResult
 from .io.param import RunParameters
 from .learning.psf_variables import LocResResult, PSFInfo, PSFResult, ROIsResult
+from .learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 
 
 class PSFLearningLib:
@@ -121,9 +122,72 @@ class PSFLearningLib:
     def prep_data(self, param: Union[RunParameters, DictConfig], images: np.ndarray):
         """Detect beads / localisations and build a data object.
 
-        See :meth:`Reader.prep_data`.
+        Parameters
+        ----------
+        param : DictConfig
+            Experiment parameters (ROI, pixel sizes, FOV, ...).
+        images : numpy.ndarray
+            Image array as returned by :meth:`read_images`.
+
+        Returns
+        -------
+        PreprocessedImageData
+            Data object with extracted ROIs ready for PSF fitting.
         """
-        return self._reader.prep_data(param, images)
+        roi_size = param.roi.roi_size
+        fov = list(param.FOV.values())
+        skew_const = param.LLS.skew_const
+        is_volume = param.PSFtype == "voxel"
+        padPSF = param.PSFtype != "voxel"
+
+
+
+        zstart = fov[-3]
+        zend = images.shape[-3]+fov[-2]
+        zstep = fov[-1]
+        zind = range(zstart,zend,zstep)
+        ims = np.swapaxes(images,0,-3)
+
+        ims = ims[zind]
+        images = np.swapaxes(ims,0,-3)
+
+
+        channeltype = param.channeltype
+        if channeltype == "single":
+            dataobj = PreprocessedImageDataSingleChannel(images)
+        else:
+            raise NotImplementedError(
+                f"channeltype={channeltype!r} is not yet supported; "
+                "only 'single' is currently implemented."
+            )
+
+        fov_param = None if fov[2] == 0 else fov
+        skew_param = (
+            None
+            if (skew_const[0] == 0.0 and skew_const[1] == 0.0)
+            else skew_const
+        )
+
+        dataobj.process(
+            roi_size=roi_size,
+            gaus_sigma=param.roi.gauss_sigma,
+            min_border_dist=list(np.array(roi_size) // 2 + 1),
+            min_center_dist=np.max(roi_size),
+            FOV=fov_param,
+            max_threshold=param.roi.peak_height,
+            max_kernel=param.roi.max_kernel,
+            pixelsize_x=param.pixel_size.x,
+            pixelsize_y=param.pixel_size.y,
+            pixelsize_z=param.pixel_size.z,
+            bead_radius=param.roi.bead_radius,
+            modulation_period=param.fpi.modulation_period,
+            plot=param.plotall,
+            padPSF=padPSF,
+            isVolume=is_volume,
+            skew_const=skew_param,
+            max_bead_number=param.roi.max_bead_number,
+        )
+        return dataobj
 
     # ── Fitting ──────────────────────────────────────────────────────
 
@@ -151,7 +215,7 @@ class PSFLearningLib:
         return learn_psf(param, dataobj, psf_info, time=time)
 
     @staticmethod
-    def learn_with_relearn(
+    def learn_psf_with_relearn(
         param: Union[RunParameters, DictConfig], dataobj, psf_info: PSFInfo, time: Optional[float] = None
     ) -> Tuple[PSFInterface, ZernikePSFResult, LocalizationResult, np.ndarray, Optional[float]]:
         """Learn PSF, localize, remove outliers and re-learn.
@@ -325,6 +389,19 @@ class PSFLearningLib:
         if psf_info is None:
             psf_info = get_psf_info(param)
         return calfwhm(param, f, psf_info)
+
+
+# ── Module-level helpers ─────────────────────────────────────────────────
+
+
+def _crop_fov(images: np.ndarray, fov: list) -> np.ndarray:
+    zstart = fov[-3]
+    zend = images.shape[-3] + fov[-2]
+    zstep = fov[-1]
+    zind = range(zstart, zend, zstep)
+    ims = np.swapaxes(images, 0, -3)
+    ims = ims[zind]
+    return np.swapaxes(ims, 0, -3)
 
 
 # ── Backward-compatible alias ────────────────────────────────────────────

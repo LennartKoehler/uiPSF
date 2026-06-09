@@ -111,6 +111,7 @@ Params:
     photon: 1.5
   
   usecuda: true                  # for spline localization
+  usecuda_tf: true               # for tensorflow PSF learning (false = TF runs on CPU)
   plotall: false
   ref_channel: 0                 # index of the reference channel, for multi-channel system
   batch_size: 1600               # maximum number of beads or emitters to be optimized at one time

@@ -1,7 +1,7 @@
 from .psfs.PSFZernikeBased import PSFZernikeBased, ZernikePSFResult
 
 from .fitters.FitterInterface import FitterInterface
-from .fitters.PSFLearner import PSFLearner, remove_outliers_single
+from .fitters.PSFLearner import PSFLearner, remove_outliers
 from .fitters.Localizer import localize, LocalizationOutput
 
 from .loss_functions import (

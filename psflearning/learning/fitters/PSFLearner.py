@@ -98,7 +98,7 @@ class PSFLearner(FitterInterface):
 
         return fit_result, forward_images, toc
 
-def remove_outliers_single(
+def remove_outliers(
     data: PreprocessedImageDataSingleChannel,
     res: ZernikePSFResult,
     locres: LocalizationResult,

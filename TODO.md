@@ -1,1 +1,0 @@
-i dont want the learner to hold any state, not data, not psf, not forward_images i would prefer that being passed to the functions of the learner. The learners state should only be about learning (like iterations or learn_rate) please implement that and all the fixes for the bugs you mentioned

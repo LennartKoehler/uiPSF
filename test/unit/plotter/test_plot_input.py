@@ -33,7 +33,8 @@ images = L.read_images(param)
 psf_info = L.get_psf_info(param)
 dataobj = L.prep_data(param, images)
 
-index: int = 0
+index: int = 1
 fig1 = L.plotter.plot_psf(dataobj.measured_roi_images[index], param.pixel_size.z)
 save_figs(fig1, output_dir, "input_psf", fmt="png", dpi=150)
 
+print("test_plot_input complete")

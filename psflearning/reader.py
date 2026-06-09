@@ -1,5 +1,5 @@
 """
-Handles all input operations: loading images, parameters, initial pupil
+Handles input operations: loading images, parameters, initial pupil
 state, and previously saved results.
 """
 
@@ -14,15 +14,8 @@ import numpy as np
 from dotted_dict import DottedDict
 from omegaconf import DictConfig, OmegaConf
 
-from psflearning.learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from .io.param import RunParameters
 from .dataloader import get_loader
-# from .learning import (
-#     PreprocessedImageDataMultiChannel,
-#     PreprocessedImageDataMultiChannel_smlm,
-#     PreprocessedImageDataSingleChannel,
-#     PreprocessedImageDataSingleChannel_smlm,
-# )
 
 
 class Reader:
@@ -65,61 +58,6 @@ class Reader:
 
         print(images.shape)
         return images
-
-    # ── Data preprocessing ───────────────────────────────────────────────
-
-    def prep_data(self, param: Union[RunParameters, DictConfig], images: np.ndarray):
-        """Detect beads / localisations in *images* and return a
-        :class:`PreprocessedImageData` object.
-
-        Parameters
-        ----------
-        param : DictConfig
-            Experiment parameters (ROI, pixel sizes, FOV, ...).
-        images : numpy.ndarray
-            Image array as returned by :meth:`read_images`.
-
-        Returns
-        -------
-        PreprocessedImageData
-            Data object with extracted ROIs ready for PSF fitting.
-        """
-        roi_size = param.roi.roi_size
-        fov = list(param.FOV.values())
-        skew_const = param.LLS.skew_const
-        is_volume = param.PSFtype == "voxel"
-
-        images = self._crop_fov(images, fov)
-
-        dataobj = self._create_dataobj(images, param)
-
-        fov_param = None if fov[2] == 0 else fov
-        skew_param = (
-            None
-            if (skew_const[0] == 0.0 and skew_const[1] == 0.0)
-            else skew_const
-        )
-
-        dataobj.process(
-            roi_size=roi_size,
-            gaus_sigma=param.roi.gauss_sigma,
-            min_border_dist=list(np.array(roi_size) // 2 + 1),
-            min_center_dist=np.max(roi_size),
-            FOV=fov_param,
-            max_threshold=param.roi.peak_height,
-            max_kernel=param.roi.max_kernel,
-            pixelsize_x=param.pixel_size.x,
-            pixelsize_y=param.pixel_size.y,
-            pixelsize_z=param.pixel_size.z,
-            bead_radius=param.roi.bead_radius,
-            modulation_period=param.fpi.modulation_period,
-            plot=param.plotall,
-            padPSF=False,
-            isVolume=is_volume,
-            skew_const=skew_param,
-            max_bead_number=param.roi.max_bead_number,
-        )
-        return dataobj
 
     # ── Parameter loading ────────────────────────────────────────────────
 
@@ -288,61 +226,7 @@ class Reader:
             return np.flip(images, axis=-3)
         return images
 
-    @staticmethod
-    def _crop_fov(images: np.ndarray, fov: list) -> np.ndarray:
-        """Slice *images* along the z-axis according to *fov*."""
-        zstart = fov[-3]
-        zend = images.shape[-3] + fov[-2]
-        zstep = fov[-1]
-        zind = range(zstart, zend, zstep)
-        ims = np.swapaxes(images, 0, -3)
-        ims = ims[zind]
-        return np.swapaxes(ims, 0, -3)
-
-    @staticmethod
-    def _create_dataobj(images: np.ndarray, param: Union[RunParameters, DictConfig]):
-        """Instantiate the correct :class:`PreprocessedImageData`
-        subclass."""
-        channeltype = param.channeltype
-        is_insitu = "insitu" in param.PSFtype
-
-        if channeltype == "single":
-            cls = PreprocessedImageDataSingleChannel
-            # cls = (
-            #     PreprocessedImageDataSingleChannel_smlm
-            #     if is_insitu
-            #     else PreprocessedImageDataSingleChannel
-            # )
-            return cls(images)
-
-        # if channeltype == "4pi":
-        #     if is_insitu:
-        #         return PreprocessedImageDataMultiChannel_smlm(
-        #             images,
-        #             PreprocessedImageDataSingleChannel_smlm,
-        #             is4pi=True,
-        #         )
-        #     return PreprocessedImageDataMultiChannel(
-        #         images,
-        #         PreprocessedImageDataSingleChannel,
-        #         is4pi=True,
-        #     )
-        #
-        # if is_insitu:
-        #     return PreprocessedImageDataMultiChannel_smlm(
-        #         images, PreprocessedImageDataSingleChannel_smlm
-        #     )
-        # return PreprocessedImageDataMultiChannel(
-        #     images, PreprocessedImageDataSingleChannel
-        # )
-
-        raise NotImplementedError(
-            f"channeltype={channeltype!r} is not yet supported; "
-            "only 'single' is currently implemented."
-        )
-
-
-# ── Module-level helpers ─────────────────────────────────────────────────
+    # ── Parameter loading ────────────────────────────────────────────────
 
 
 def _reorder_ref_channel(images: np.ndarray, param: Union[RunParameters, DictConfig]) -> np.ndarray:

@@ -5,18 +5,11 @@ import sys
 sys.path.append("../..")
 from psflearning.psflearninglib import PSFLearningLib
 from psflearning import io
-import tensorflow as tf
 
 main_data_dir = 'example_data_for_uiPSF'
 output_dir = 'test_output'
 
-try:
-    gpus = tf.config.list_physical_devices('GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    print('Running on GPU')
-except Exception:
-    print('Running on CPU')
+param = io.param.combine('config_base', psftype='zernike', channeltype='1ch', sysfile='M2')
 
 L = PSFLearningLib()
 
@@ -45,7 +38,7 @@ dataobj = L.prep_data(param, images)
 
 # -- RUN --
 for k in range(0, 1):
-    psf_model, learning_result, loc_result, forward_images, toc = L.learn_with_relearn(param, dataobj, psf_info, time=0)
+    psf_model, learning_result, loc_result, forward_images, toc = L.learn_psf_with_relearn(param, dataobj, psf_info, time=0)
 
 
 # -- SAVE --

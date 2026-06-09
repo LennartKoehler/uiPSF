@@ -223,5 +223,5 @@ def _create_dataobj(images, param):
     if channeltype == "single":
         return PreprocessedImageDataSingleChannel(images)
     raise NotImplementedError(
-        f"channeltype={channeltype!r} is not yet supported in data_io; use Reader.prep_data instead."
+        f"channeltype={channeltype!r} is not yet supported; only 'single' is currently implemented."
     )
