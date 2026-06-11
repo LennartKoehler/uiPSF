@@ -7,7 +7,7 @@ All rights reserved
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from .psfs.PSFInterface import LearnablePSFParameters, LearnableParameter, ParameterScope
+from .psfs.IPSFModel import LearnablePSFParameters, LearnableParameter, ParameterScope
 import time
 
 from typing import Any, List

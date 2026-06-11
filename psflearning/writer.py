@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 
 from .learning.loclib import LocalizationResult
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
-from .learning.psfs.PSFInterface import PSFInterface
+from .learning.psfs.IPSFModel import IPSFModel, PupilField
 from .learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .io.param import RunParameters
 
@@ -40,7 +40,7 @@ class Writer(ABC):
     def save_result(
         self,
         param: RunParameters,
-        psf_model: PSFInterface,
+        pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
@@ -54,7 +54,7 @@ class STDOUTWriter(Writer):
     def save_result(
         self,
         param: RunParameters,
-        psf_model: PSFInterface,
+        pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
@@ -74,7 +74,7 @@ class H5Writer(Writer):
     def save_result(
         self,
         param: RunParameters,
-        psf_model: PSFInterface,
+        pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
@@ -86,8 +86,8 @@ class H5Writer(Writer):
         ----------
         param : RunParameters
             Experiment parameters.
-        psf_model : PSFInterface
-            Fitted PSF model (provides zernike_polynomial_basis, apodization).
+        pupil_field : PupilField
+            Precomputed optical quantities (provides zernike_polynomial_basis, apodization).
         dataobj : PreprocessedImageData
             Data object with extracted ROIs (provides roi_centers, roi_centers_all).
         learning_result : ZernikePSFResult
@@ -111,7 +111,7 @@ class H5Writer(Writer):
         )
 
         savename = param.savename + "_" + param.PSFtype
-        result_dict = _build_result_dict(learning_result, psf_model, dataobj)
+        result_dict = _build_result_dict(learning_result, pupil_field, dataobj)
 
         img, _, centers, file_idxs = dataobj.get_image_data()
         img = np.stack(img)
@@ -182,12 +182,12 @@ class H5Writer(Writer):
 
 def _build_result_dict(
     learning_result: ZernikePSFResult,
-    psf_model: PSFInterface,
+    pupil_field: PupilField,
     dataobj: PreprocessedImageDataInterface,
 ) -> dict:
     """Build the result dict for HDF5 storage from a ZernikePSFResult.
 
-    Combines the fitting result with additional data from the PSF model
+    Combines the fitting result with additional data from the pupil field
     and data object.
     """
     return {
@@ -204,8 +204,8 @@ def _build_result_dict(
         "gaussian_blur_sigma": np.squeeze(learning_result.sigma) / np.pi,
         "drift_rate": learning_result.drift_xy,
         "model_image_offset": np.min(learning_result.psf_model_image),
-        "zernike_polynomial_basis": psf_model.zernike_polynomial_basis,
-        "apodization": psf_model.apodization,
+        "zernike_polynomial_basis": pupil_field.zernike_polynomial_basis,
+        "apodization": pupil_field.apodization,
         "all_roi_centers": dataobj.roi_centers_all,
         "selected_roi_centers": dataobj.roi_centers,
     }

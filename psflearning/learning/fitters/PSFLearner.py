@@ -6,11 +6,12 @@ import numpy as np
 import tensorflow as tf
 
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
+from psflearning.learning.psfs.PSFZernikeBase import PSFContext
 
 from ..loclib import LocalizationResult
 from .FitterInterface import FitterInterface
 from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
-from ..psfs.PSFInterface import LearnablePSFParameters, PSFInterface
+from ..psfs.IPSFModel import LearnablePSFParameters, IPSFModel
 from ..optimizers import OptimizerABC
 from tqdm import tqdm
 from typing import Any, Callable, List, Optional, Tuple
@@ -20,7 +21,7 @@ class PSFLearner(FitterInterface):
     """
     Combines optimizer and loss function to define the PSF learning process.
     Holds only learning-related state (optimizer, loss, penalty params).
-    Data and PSF model are passed explicitly to each method call.
+    Data, PSF model, and context are passed explicitly to each method call.
     """
     def __init__(
         self,
@@ -40,11 +41,12 @@ class PSFLearner(FitterInterface):
 
     def _make_objective(
         self,
-        psf: PSFInterface,
+        psf: IPSFModel,
         measured_roi_images: np.ndarray,
+        context: PSFContext,
         data=None,
     ) -> Callable:
-        """Create an objective closure that captures *psf* and *measured_roi_images*.
+        """Create an objective closure that captures *psf*, *context*, and *measured_roi_images*.
 
         The returned callable has the signature expected by the optimizers:
         ``objective(variables, mu, ind)``.
@@ -56,7 +58,7 @@ class PSFLearner(FitterInterface):
         ) -> Any:
             if ind is None:
                 ind = [0, measured_roi_images.shape[0]]
-            forward_images = psf.calc_forward_images(variables, data=data)
+            forward_images = psf.calc_forward_images(variables, context, data=data)
             loss = self.loss_func(forward_images, measured_roi_images[ind[0]:ind[1]], variables, mu, self.loss_weight)
             return loss
         return objective
@@ -64,8 +66,9 @@ class PSFLearner(FitterInterface):
     def learn_psf(
         self,
         data: PreprocessedImageDataSingleChannel,
-        psf: PSFInterface,
+        psf: IPSFModel,
         variables: ZernikePSFVariables,
+        context: PSFContext,
         start_time: Optional[float] = None,
     ) -> Tuple[ZernikePSFResult, np.ndarray, float]:
         """
@@ -75,10 +78,12 @@ class PSFLearner(FitterInterface):
         ----------
         data : PreprocessedImageDataSingleChannel
             Image data (ROIs are read from here).
-        psf : PSFInterface
+        psf : IPSFModel
             PSF model used to compute forward images and postprocessing.
         variables : ZernikePSFVariables
             Initial learnable variables.
+        context : PSFContext
+            PSF context carrying all operational state.
         start_time : float, optional
             Start-time stamp for progress reporting.
 
@@ -87,7 +92,7 @@ class PSFLearner(FitterInterface):
         tuple of (ZernikePSFResult, np.ndarray, float)
             ``(fit_result, forward_images, toc)``
         """
-        objective = self._make_objective(psf, data.measured_roi_images, data=data)
+        objective = self._make_objective(psf, data.measured_roi_images, context, data=data)
 
         pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
 
@@ -95,9 +100,9 @@ class PSFLearner(FitterInterface):
         toc = pbar.postfix[-1]['time']
         pbar.close()
 
-        forward_images = psf.calc_forward_images(variables, data=data).numpy()
+        forward_images = psf.calc_forward_images(variables, context, data=data).numpy()
 
-        fit_result = psf.postprocess(data, variables)
+        fit_result = psf.postprocess(data, variables, context)
 
         return fit_result, forward_images, toc
 

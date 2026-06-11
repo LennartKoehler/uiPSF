@@ -24,6 +24,8 @@ from typing import Union
 
 from .psf_registry import PSFInfo
 from .io.param import RunParameters
+from .learning.psfs.IPSFModel import IPSFModel
+from .learning.psfs.PSFZernikeBase import PSFContext
 
 
 def genpsf(
@@ -53,7 +55,7 @@ def genpsf(
 
     Returns
     -------
-    tuple of (DottedDict, PSFInterface)
+    tuple of (DottedDict, IPSFModel)
         Updated *f* and the PSF model object.
     """
     from .fitting import initialize_psf
@@ -83,8 +85,9 @@ def _genpsf_single(psf_model, dataobj, f, p, Nz, stagepos):
         f.res.zernike_coefficients[1].shape + (1, 1)
     )
 
-    psf_model.calpupilfield(dataobj, "scalar", Nz=Nz)
-    f.res.psf_model_image, _ = psf_model.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
+    pupil_field = IPSFModel.compute_pupil_field(dataobj, p.option, "scalar", Nz=Nz)
+    context = PSFContext(params=p.option, pupil_field=pupil_field)
+    f.res.psf_model_image, _ = psf_model.genpsfmodel(sigma, context, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
 
 
 def calstrehlratio(

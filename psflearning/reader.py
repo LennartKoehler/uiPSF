@@ -126,29 +126,28 @@ class Reader:
 
     @staticmethod
     def load_initial_pupil(
-        param: Union[RunParameters, DictConfig], psf_model, dataobj
-    ) -> None:
-        """Load initial pupil / PSF / Zernike coefficients from an HDF5
-        file into *psf_model* in-place.
+        param: Union[RunParameters, DictConfig],
+    ) -> Optional[np.ndarray]:
+        """Load initial pupil from an HDF5 result file.
 
-        If ``param.option.model.init_pupil_file`` is falsy, this is a
-        no-op.
+        If ``param.option.model.init_pupil_file`` is falsy, returns None.
 
         Parameters
         ----------
         param : DictConfig
             Experiment parameters (``option.model.init_pupil_file`` is used).
-        psf_model : PSFInterface
-            PSF model object to populate with initial values.
-        dataobj : PreprocessedImageData
-            Data object (unused, kept for interface compatibility).
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Initial pupil array, or None if no file is configured.
         """
         pupilfile = param.option.model.init_pupil_file
         if not pupilfile:
-            return
+            return None
 
         with h5.File(pupilfile, "r") as f:
-            _load_single_channel_pupil(psf_model, f)
+            return _load_single_channel_pupil(f)
 
     # ── Internal helpers (image transforms) ──────────────────────────────
 
@@ -191,12 +190,16 @@ class Reader:
     # ── Parameter loading ────────────────────────────────────────────────
 
 
-def _load_single_channel_pupil(psf_model, f: h5.File) -> None:
+def _load_single_channel_pupil(f: h5.File) -> Optional[np.ndarray]:
+    """Extract pupil array from an HDF5 result file.
+
+    Returns the pupil array, or None if not found.
+    """
     res_group: h5.Group = f["res"]  # type: ignore[assignment]
     try:
-        psf_model.initial_pupil = np.array(res_group["pupil"])  # type: ignore[index]
+        return np.array(res_group["pupil"])  # type: ignore[index]
     except (KeyError, OSError):
-        pass
+        return None
 
 
 def _redefine(base_param: DictConfig, user_param: DictConfig) -> DictConfig:

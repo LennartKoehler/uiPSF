@@ -40,10 +40,10 @@ param.relearn = True
 
 images = reader.read_images(param)
 # -- RUN --
-parameters, psf_model, dataobj, learning_result, loc_result, forward_images = PSFLearningLib.run(param, images)
+parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run(param, images)
 # -- SAVE --
 
-resfile = writer.save_result(parameters, psf_model, dataobj, learning_result, loc_result, forward_images)
+resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images)
 
 f, p = io.h5.load(resfile)
 

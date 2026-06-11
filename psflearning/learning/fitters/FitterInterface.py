@@ -26,7 +26,7 @@ class FitterInterface:
         ----------
         data : PreprocessedImageData
             Image data with extracted ROIs.
-        psf : PSFInterface
+        psf : IPSFModel
             PSF model for forward image computation.
         variables : LearnablePSFParameters
             Initial learnable variables.

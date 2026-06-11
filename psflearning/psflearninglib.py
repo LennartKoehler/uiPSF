@@ -23,8 +23,8 @@ Typical workflows
 >>> images = lib.load_data(param)
 >>> psf_info = lib.get_psf_info(param)
 >>> dataobj = lib.prep_data(param, images)
->>> psf_model, fit_result, locres, toc = lib.learn_with_relearn(param, dataobj, psf_info)
->>> resfile = lib.save_result(param, psf_model, dataobj, fit_result, locres)
+>>> psf_model, fit_result, locres, toc, context = lib.learn_with_relearn(param, dataobj, psf_info)
+>>> resfile = lib.save_result(param, context.pupil_field, dataobj, fit_result, locres)
 
 **2. Evaluate / generate PSF from saved results:**
 
@@ -42,8 +42,9 @@ import numpy as np
 from omegaconf import DictConfig
 
 from psflearning.learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
-from psflearning.learning.psfs.PSFInterface import PSFInterface
+from psflearning.learning.psfs.IPSFModel import IPSFModel
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult
+from psflearning.learning.psfs.PSFZernikeBase import PSFContext
 from psflearning.learning.loclib import LocalizationResult
 
 
@@ -74,22 +75,23 @@ class PSFLearningLib:
     @staticmethod
     def run(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
         RunParameters,
-        PSFInterface,
+        IPSFModel,
         PreprocessedImageDataInterface,
         ZernikePSFResult,
         LocalizationResult,
-        np.ndarray]:
+        np.ndarray,
+        PSFContext]:
 
         psf_info = get_psf_info(parameters)
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.relearn:
-            psf_model, learning_result, loc_result, forward_images, toc = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
         else:
-            psf_model, learning_result, _, _, forward_images, toc = learn_psf(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, _, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
             loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, toc=toc)
 
-        return parameters, psf_model, dataobj, learning_result, loc_result, forward_images
+        return parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context
 
 
 
