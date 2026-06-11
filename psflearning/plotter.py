@@ -17,7 +17,9 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import numpy as np
 from typing import Tuple
-from .learning.psf_variables import LocResResult, PSFResult, ROIsResult, ReportResult
+
+from .learning.loclib import LocalizationResult
+from .writer import ROIsResult
 
 
 def save_figs(
@@ -49,15 +51,15 @@ class Plotter:
 
     def generate_report(
         self,
-        res: PSFResult,
+        res,
         rois: ROIsResult,
-        locres: LocResResult,
+        locres: LocalizationResult,
         p,
         output_dir: str,
         index: int = 0,
         fmt: str = "png",
         dpi: int = 150,
-    ) -> ReportResult:
+    ):
         pixel_size_z = p.pixel_size.z
 
         zernike_paths = None
@@ -71,17 +73,14 @@ class Plotter:
         psf_vs_data_paths = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
 
         fig = self.plot_localization(locres.localized_positions, p.pixel_size)
-        if hasattr(locres, "fourier_domain_positions") and locres.fourier_domain_positions is not None:
-            fig_fd = self.plot_localization(locres.fourier_domain_positions, p.pixel_size)
-            localization_paths = save_figs([fig, fig_fd], output_dir, "localization", fmt, dpi)
-        else:
-            localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
+        localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
 
         try:
-            figs = self.plot_zernike(
+            fig_coeff, fig_pupil = self.plot_zernike(
                 res.zernike_coefficients, res.pupil, res.zernike_polynomial_basis,
             )
-            zernike_paths = save_figs(figs, output_dir, "zernike", fmt, dpi)
+            zernike_paths = save_figs(fig_coeff, output_dir, "zernike", fmt, dpi)
+            pupil_paths = save_figs(fig_pupil, output_dir, "pupil", fmt, dpi)
         except Exception:
             try:
                 figs = self.plot_pupil(res.pupil)
@@ -98,14 +97,6 @@ class Plotter:
         fig = self.plot_coordinates(res.selected_roi_centers, res.all_roi_centers)
         coordinates_paths = save_figs(fig, output_dir, "coordinates", fmt, dpi)
 
-        return ReportResult(
-            psf_vs_data=psf_vs_data_paths,
-            localization=localization_paths,
-            zernike=zernike_paths,
-            pupil=pupil_paths,
-            learned_params=learned_params_paths,
-            coordinates=coordinates_paths,
-        )
 
     # ── Learned parameters ───────────────────────────────────────────────
 
@@ -180,8 +171,10 @@ class Plotter:
         pupil: np.ndarray,
         zernike_polynomial: np.ndarray,
         index: Optional[int] = None,
-    ) -> List[matplotlib.figure.Figure]:
-        return _plot_zernike_single(zernike_coeff, pupil, zernike_polynomial, index)
+    ) -> Tuple[matplotlib.figure.Figure, matplotlib.figure.Figure]:
+        fig_coeff = _plot_zernike_coefficients(zernike_coeff, index)
+        fig_pupil = _plot_zernike_pupil(zernike_coeff, pupil, zernike_polynomial, index)
+        return fig_coeff, fig_pupil
 
     # ── Zernike map ──────────────────────────────────────────────────────
 
@@ -397,12 +390,10 @@ def _plot_pupil_single(
     return fig
 
 
-def _plot_zernike_single(
+def _plot_zernike_coefficients(
     zernike_coeff: np.ndarray,
-    pupil: np.ndarray,
-    zernike_polynomial_basis: np.ndarray,
     index: Optional[int] = None,
-) -> List[matplotlib.figure.Figure]:
+) -> matplotlib.figure.Figure:
     n_max = zernike_coeff.shape[-1] - 1
     n_max_approx = int(np.sqrt(2 * n_max))
     Nk = (n_max_approx + 1) * (n_max_approx + 2) // 2
@@ -417,11 +408,6 @@ def _plot_zernike_single(
         zcoeff = zernike_coeff[:, index]
     else:
         zcoeff = zernike_coeff
-
-    if len(pupil.shape) > 2:
-        aperture = np.float32(np.abs(pupil[0]) > 0.0)
-    else:
-        aperture = np.float32(np.abs(pupil) > 0.0)
 
     fig_coeff = plt.figure(figsize=[10, 8])
     ax = fig_coeff.add_subplot(2, 1, 1)
@@ -448,6 +434,25 @@ def _plot_zernike_single(
     )
     ax1.set_axis_off()
 
+    return fig_coeff
+
+
+def _plot_zernike_pupil(
+    zernike_coeff: np.ndarray,
+    pupil: np.ndarray,
+    zernike_polynomial_basis: np.ndarray,
+    index: Optional[int] = None,
+) -> matplotlib.figure.Figure:
+    if index is not None:
+        zcoeff = zernike_coeff[:, index]
+    else:
+        zcoeff = zernike_coeff
+
+    if len(pupil.shape) > 2:
+        aperture = np.float32(np.abs(pupil[0]) > 0.0)
+    else:
+        aperture = np.float32(np.abs(pupil) > 0.0)
+
     pupil_mag = (
         np.sum(zernike_polynomial_basis * zcoeff[0].reshape((-1, 1, 1)), axis=0) * aperture
     )
@@ -466,7 +471,7 @@ def _plot_zernike_single(
     fig_pupil.colorbar(ax.images[0], ax=ax)
     ax.set_title("pupil phase", fontsize=20)
 
-    return [fig_coeff, fig_pupil]
+    return fig_pupil
 
 
 def _zernike_map(image_size, index, zmap, zcoeff, pupil, Zk):

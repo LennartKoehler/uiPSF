@@ -19,7 +19,7 @@ import os
 import sys
 from psflearning import io
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, Union
 
 
 def _cuda_available() -> bool:
@@ -35,30 +35,29 @@ def _cuda_available() -> bool:
     except OSError:
         return False
 
-from .psf_variables import Positions
+
+@dataclass
+class Positions:
+    x: np.ndarray
+    y: np.ndarray
+    z: np.ndarray
+    zast: Optional[np.ndarray] = None
+
+    def to_dict(self) -> dict[str, np.ndarray]:
+        d: dict[str, np.ndarray] = {"x": self.x, "y": self.y, "z": self.z}
+        if self.zast is not None:
+            d["zast"] = self.zast
+        return d
+
 
 
 @dataclass
 class LocalizationResult:
-    """Structured result returned by the MLE localization routines.
+    """Structured result from MLE localization.
 
-    Attributes
-    ----------
-    parameters : np.ndarray
-        Fitted parameters per emitter (x, y, z, photons, bg, ...).
-    crlb : np.ndarray
-        Cramér-Rao lower bounds (uncertainty estimates) for each parameter.
-    log_likelihood : np.ndarray
-        Log-likelihood values per fit.
-    spline_coefficients : np.ndarray
-        Cubic-spline coefficients used for the fit.
-    mse_z_ratio : np.ndarray
-        Relative MSE in z (used as outlier rejection metric).
-    toc : float
-        End time of the localization step.
-    positions : dict[str, np.ndarray]
-        Localized positions with keys ``'x'``, ``'y'``, ``'z'``.
+    Created by :func:`localizationlib.loc_ast` and :func:`localize`.
     """
+
     parameters: np.ndarray
     crlb: np.ndarray
     log_likelihood: np.ndarray
@@ -66,6 +65,16 @@ class LocalizationResult:
     mse_z_ratio: np.ndarray
     toc: float
     positions: Positions
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "mle_parameters": self.parameters,
+            "cramer_rao_bounds": self.crlb,
+            "log_likelihoods": self.log_likelihood,
+            "spline_coefficients": self.spline_coefficients,
+            "localized_positions": self.positions.to_dict(),
+        }
+        return d
 #%%
 class localizationlib:
     def __init__(self, usecuda: bool = False) -> None:

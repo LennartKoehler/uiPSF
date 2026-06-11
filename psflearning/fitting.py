@@ -18,14 +18,14 @@ from .reader import Reader
 from omegaconf import DictConfig
 
 from .learning import PSFLearner, L_BFGS_B, LocalizationResult, remove_outliers
-from .learning.psf_variables import PSFInfo
-from .learning.psfs.PSFZernikeBased import ZernikePSFResult
+from .psf_registry import PSFInfo
+from .learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 from .learning.psfs.PSFInterface import PSFInterface
 from .learning.fitters.Localizer import localize
 from .io.param import RunParameters
 
 
-def initialize_psf(param: Union[RunParameters, DictConfig], psf_info: PSFInfo):
+def initialize_psf(param: RunParameters, psf_info: PSFInfo):
     """Create and return a PSF model object from *psf_info*.
 
     Parameters
@@ -65,7 +65,7 @@ def learn_psf(
     dataobj,
     psf_info: PSFInfo,
     time: Optional[float] = None,
-) -> Tuple[PSFInterface, ZernikePSFResult, PSFLearner, np.ndarray, Optional[float]]:
+) -> Tuple[PSFInterface, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, Optional[float]]:
     """Run the PSF fitting optimisation.
 
     Parameters
@@ -81,26 +81,25 @@ def learn_psf(
 
     Returns
     -------
-    tuple of (PSFInterface, ZernikePSFResult, PSFLearner, np.ndarray, float)
-        ``(psf_model, fit_result, learner, forward_images, toc)``
+    tuple of (PSFInterface, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, float)
+        ``(psf_model, fit_result, learner, variables, forward_images, toc)``
     """
     psf_model = initialize_psf(param, psf_info)
     Reader.load_initial_pupil(param, psf_model, dataobj)
 
     learner = create_learner(param, psf_info)
 
-    _, _, centers, _ = dataobj.get_image_data()
-
     variables, time = psf_model.calc_initials(dataobj, time)
     fit_result, forward_images, toc = learner.learn_psf(dataobj, psf_model, variables, start_time=time)
 
-    return psf_model, fit_result, learner, forward_images, toc
+    return psf_model, fit_result, learner, variables, forward_images, toc
 
 
 def relearn(
     data,
     psf: PSFInterface,
     learner: PSFLearner,
+    variables: ZernikePSFVariables,
     forward_images: np.ndarray,
     fit_result: ZernikePSFResult,
     param: Union[RunParameters, DictConfig],
@@ -117,6 +116,8 @@ def relearn(
         Fitted PSF model.
     learner : PSFLearner
         The learner instance (holds optimizer and loss function).
+    variables : ZernikePSFVariables
+        Optimized variables from the previous learning step.
     forward_images : np.ndarray
         Forward images from the previous learning step.
     fit_result : ZernikePSFResult
@@ -138,8 +139,8 @@ def relearn(
 
     locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
 
-    filtered_vars = psf.remove_outliers(
-        data, fit_result, locres, forward_images, threshold,
+    filtered_vars = remove_outliers(
+        data, variables, fit_result, locres, forward_images, threshold,
     )
     if filtered_vars is not None:
         fit_result, forward_images, toc = learner.learn_psf(
@@ -180,13 +181,13 @@ def learn_psf_with_relearn(
     tuple of (PSFInterface, ZernikePSFResult, LocalizationResult, np.ndarray, float)
         ``(psf_model, fit_result, locres, forward_images, toc)``
     """
-    psf, fit_result, learner, forward_images, toc = learn_psf(param, data, psf_info, time=time)
+    psf, fit_result, learner, variables, forward_images, toc = learn_psf(param, data, psf_info, time=time)
 
     _, _, _, file_idxs = data.get_image_data()
 
     if len(file_idxs) > 1:
         fit_result, locres, forward_images, toc = relearn(
-            data, psf, learner, forward_images,
+            data, psf, learner, variables, forward_images,
             fit_result, param, toc=toc,
         )
     else:

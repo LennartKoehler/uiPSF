@@ -6,10 +6,11 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/demo/test_demo_beadPSF_1ch.py",
-            "console": "integratedTerminal",
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
             }
         },
         {
@@ -20,12 +21,14 @@
             "args": [
                 "${workspaceFolder}/test/unit/plotter/test_plotter.py",
                 "-v",
+                "-s",
                 "--no-header"
             ],
-            "console": "integratedTerminal",
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
             }
         },
         {
@@ -36,13 +39,33 @@
             "args": [
                 "${workspaceFolder}/test/unit/plotter/test_plot_input.py",
                 "-v",
+                "-s",
                 "--no-header"
             ],
-            "console": "integratedTerminal",
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
             }
-        }
+        },
+        {
+            "name": "pytest: default",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${workspaceFolder}/test/unit/plotter/test_plot_input.py",
+                "-v",
+                "-s",
+                "--no-header"
+            ],
+            "console": "internalConsole",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "PYTHONUNBUFFERED": "1"
+            }
+       }
     ]
 }

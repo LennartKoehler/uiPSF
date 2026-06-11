@@ -41,26 +41,21 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from omegaconf import DictConfig
 
-from .reader import Reader
-from .writer import Writer
-from .plotter import Plotter
+from psflearning.learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from psflearning.learning.psfs.PSFInterface import PSFInterface
+from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult
+from psflearning.learning.loclib import LocalizationResult
+
+
 from .psf_registry import get_psf_info
 from .fitting import (
-    initialize_psf,
     learn_psf,
     learn_psf_with_relearn,
-    relearn,
 )
-from .analysis import genpsf, calstrehlratio, calfwhm
 
-from .learning import PSFLearner, LocalizationOutput
-from .learning.fitters.Localizer import localize
-from .learning.psfs.PSFZernikeBased import ZernikePSFResult
-from .learning.psfs.PSFInterface import PSFInterface
-from .learning.loclib import LocalizationResult
 from .io.param import RunParameters
-from .learning.psf_variables import LocResResult, PSFInfo, PSFResult, ROIsResult
 from .learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+from .learning.fitters.Localizer import localize
 
 
 class PSFLearningLib:
@@ -75,31 +70,32 @@ class PSFLearningLib:
     for direct access to visualisation methods.
     """
 
-    def __init__(self,
-            reader: Reader,
-            writer: Writer
-                 ) -> None:
-        self._reader = reader
-        self._writer = writer
 
-    def run(self, parameters: RunParameters) -> str:
+    @staticmethod
+    def run(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
+        RunParameters,
+        PSFInterface,
+        PreprocessedImageDataInterface,
+        ZernikePSFResult,
+        LocalizationResult,
+        np.ndarray]:
 
-        images = self._reader.read_images(parameters)
         psf_info = get_psf_info(parameters)
-        dataobj = self._prep_data(parameters, images)
+        dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.relearn:
             psf_model, learning_result, loc_result, forward_images, toc = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
-
         else:
-            psf_model, learning_result, _, forward_images, toc = learn_psf(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, _, _, forward_images, toc = learn_psf(parameters, dataobj, psf_info, time=0)
+            loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, toc=toc)
 
-        resfile = self._writer.save_result(parameters, psf_model, dataobj, learning_result, loc_result, forward_images=forward_images)
-        return resfile
+        return parameters, psf_model, dataobj, learning_result, loc_result, forward_images
 
 
 
-    def _prep_data(self, param: Union[RunParameters, DictConfig], images: np.ndarray):
+
+    @staticmethod
+    def _prep_data( param: Union[RunParameters, DictConfig], images: np.ndarray):
         """Detect beads / localisations and build a data object.
 
         Parameters

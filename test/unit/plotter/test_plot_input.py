@@ -3,14 +3,22 @@ plt.use('Agg')
 
 import sys
 sys.path.append("../..")
-from psflearning.psflearninglib import PSFLearningLib
 from psflearning import io
-from psflearning.plotter import save_figs
+from psflearning.plotter import Plotter, save_figs
+from psflearning.reader import Reader
+from psflearning.writer import STDOUTWriter
+from psflearning import PSFLearningLib
+
+from psflearning.psf_registry import get_psf_info
 
 main_data_dir = 'example_data_for_uiPSF'
 output_dir = 'test_output'
-L = PSFLearningLib()
 
+reader = Reader()
+writer = STDOUTWriter()
+plotter = Plotter()
+
+lib = PSFLearningLib(reader, writer)
 # -- SETUP --
 param = io.param.combine('config_base', psftype='zernike', sysfile='M2')
 
@@ -29,12 +37,12 @@ param.option.imaging.emission_wavelength = 0.6
 
 # param.iterations = 250 # TESTVALUE
 
-images = L.read_images(param)
-psf_info = L.get_psf_info(param)
-dataobj = L._prep_data(param, images)
+images = reader.read_images(param)
+psf_info = get_psf_info(param)
+dataobj = lib._prep_data(param, images)
 
 index: int = 1
-fig1 = L.plotter.plot_psf(dataobj.measured_roi_images[index], param.pixel_size.z)
+fig1 = plotter.plot_psf(dataobj.measured_roi_images[index], param.pixel_size.z)
 save_figs(fig1, output_dir, "input_psf", fmt="png", dpi=150)
 
 print("test_plot_input complete")

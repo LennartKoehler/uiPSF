@@ -42,6 +42,7 @@ class PSFLearner(FitterInterface):
         self,
         psf: PSFInterface,
         measured_roi_images: np.ndarray,
+        data=None,
     ) -> Callable:
         """Create an objective closure that captures *psf* and *measured_roi_images*.
 
@@ -55,7 +56,7 @@ class PSFLearner(FitterInterface):
         ) -> Any:
             if ind is None:
                 ind = [0, measured_roi_images.shape[0]]
-            forward_images = psf.calc_forward_images(variables)
+            forward_images = psf.calc_forward_images(variables, data=data)
             loss = self.loss_func(forward_images, measured_roi_images[ind[0]:ind[1]], variables, mu, self.loss_weight)
             return loss
         return objective
@@ -86,7 +87,7 @@ class PSFLearner(FitterInterface):
         tuple of (ZernikePSFResult, np.ndarray, float)
             ``(fit_result, forward_images, toc)``
         """
-        objective = self._make_objective(psf, data.measured_roi_images)
+        objective = self._make_objective(psf, data.measured_roi_images, data=data)
 
         pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
 
@@ -94,14 +95,15 @@ class PSFLearner(FitterInterface):
         toc = pbar.postfix[-1]['time']
         pbar.close()
 
-        forward_images = psf.calc_forward_images(variables).numpy()
+        forward_images = psf.calc_forward_images(variables, data=data).numpy()
 
-        fit_result = psf.postprocess(variables)
+        fit_result = psf.postprocess(data, variables)
 
         return fit_result, forward_images, toc
 
 def remove_outliers(
     data: PreprocessedImageDataSingleChannel,
+    variables: ZernikePSFVariables,
     res: ZernikePSFResult,
     locres: LocalizationResult,
     forward_images: np.ndarray,
@@ -109,7 +111,7 @@ def remove_outliers(
 ) -> Optional[ZernikePSFVariables]:
     """Remove outlier ROIs for single-channel data based on rejection metrics.
 
-    Filters the data object and learning variables in-place.
+    Filters the data object in-place and returns filtered variables.
     Returns the filtered variables if any outliers were removed,
     or *None* if no outliers were found (or all would be removed).
     """
@@ -132,7 +134,7 @@ def remove_outliers(
     _, rois, _, _ = data.get_image_data()
     logging.debug("rois shape channel : %s", rois.shape)
 
-    return res.filter_by_mask(mask)
+    return variables.filter_by_mask(mask)
 
 
 def get_mask(metric, minI, threshold):

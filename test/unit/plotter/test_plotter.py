@@ -53,11 +53,12 @@ def test_plot_pupil(plotter, data, output_dir):
 
 def test_plot_zernike(plotter, data, output_dir):
     f, p = data
-    figs = plotter.plot_zernike(
+    fig_coeff, fig_pupil = plotter.plot_zernike(
         f.res.zernike_coefficients, f.res.pupil, f.res.zernike_polynomial_basis,
     )
-    paths = save_figs(figs, str(output_dir), "zernike")
-    assert all(Path(pt).exists() for pt in paths)
+    paths_coeff = save_figs(fig_coeff, str(output_dir), "zernike")
+    paths_pupil = save_figs(fig_pupil, str(output_dir), "pupil")
+    assert all(Path(pt).exists() for pt in paths_coeff + paths_pupil)
 
 def test_plot_psf_vs_data(plotter, data, output_dir):
     f, p = data

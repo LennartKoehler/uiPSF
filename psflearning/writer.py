@@ -1,26 +1,37 @@
 """
-Handles all output operations: serialising PSF fitting results to HDF5
-and generating cubic-spline coefficients for downstream localisation.
+Handles all output operations: serialising PSF fitting results to HDF5.
 """
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from dataclasses import asdict, dataclass
+from typing import Any, Optional, Union
 
 import h5py as h5
 import json
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 from abc import ABC, abstractmethod
 
-from .learning import psf2cspline_np
-from .learning.psf_variables import LocResResult, PSFResult, ROIsResult
+from .learning.loclib import LocalizationResult
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.PSFInterface import PSFInterface
 from .learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .io.param import RunParameters
 
+
+@dataclass
+class ROIsResult:
+    """ROI data for storage."""
+
+    roi_centers: np.ndarray
+    source_file_indices: np.ndarray
+    measured_roi_images: np.ndarray
+    modeled_roi_images: np.ndarray
+    full_image_size: tuple
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 class Writer(ABC):
@@ -32,21 +43,27 @@ class Writer(ABC):
         psf_model: PSFInterface,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: LocResResult,
-        fourier_domain_positions=None,
+        loc_result: LocalizationResult,
         forward_images: Optional[np.ndarray] = None,
     ) -> str:
         pass
 
-    @abstractmethod
-    def write_to_file(
-        param,
-        filename: str,
-        res: PSFResult,
-        locres: LocResResult,
-        rois: ROIsResult,
-    ) -> None:
-        pass
+
+class STDOUTWriter(Writer):
+
+    def save_result(
+        self,
+        param: RunParameters,
+        psf_model: PSFInterface,
+        dataobj: PreprocessedImageDataInterface,
+        learning_result: ZernikePSFResult,
+        loc_result: LocalizationResult,
+        forward_images: Optional[np.ndarray] = None,
+    ) -> str:
+        print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
+
+        return "succcess"
+
 
 class H5Writer(Writer):
     """Unified interface for all write operations in the PSF-learning
@@ -60,26 +77,23 @@ class H5Writer(Writer):
         psf_model: PSFInterface,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: LocResResult,
-        fourier_domain_positions=None,
+        loc_result: LocalizationResult,
         forward_images: Optional[np.ndarray] = None,
     ) -> str:
         """Save fitting results, localisation results, and ROI data to a file.
 
         Parameters
         ----------
-        param : DictConfig
+        param : RunParameters
             Experiment parameters.
         psf_model : PSFInterface
-            Fitted PSF model.
+            Fitted PSF model (provides zernike_polynomial_basis, apodization).
         dataobj : PreprocessedImageData
-            Data object with extracted ROIs.
+            Data object with extracted ROIs (provides roi_centers, roi_centers_all).
         learning_result : ZernikePSFResult
             Fitting output as returned by :func:`fitting.learn_psf`.
-        loc_result : LocalizationResult or LocResResult
+        loc_result : LocalizationResult
             Localisation output.
-        fourier_domain_positions, optional
-            Fourier-domain localisation result, or ``None``.
         forward_images : np.ndarray, optional
             Forward images from the learning step. Used for ``modeled_roi_images`` in
             the saved ROIs result.
@@ -97,16 +111,7 @@ class H5Writer(Writer):
         )
 
         savename = param.savename + "_" + param.PSFtype
-        psf_result = psf_model.res2dict(learning_result)
-
-        coeff_reverse = generate_cspline(
-            psf_result, keyname="psf_model_image_reversed"
-        )
-        coeff = generate_cspline(psf_result, psf_model)
-
-        locres = self._build_locres(
-            loc_result, coeff, coeff_reverse, fourier_domain_positions
-        )
+        result_dict = _build_result_dict(learning_result, psf_model, dataobj)
 
         img, _, centers, file_idxs = dataobj.get_image_data()
         img = np.stack(img)
@@ -120,7 +125,7 @@ class H5Writer(Writer):
         )
 
         resfile = savename + ".h5"
-        self.write_to_file(param, resfile, psf_result, locres, rois)
+        self.write_to_file(param, resfile, result_dict, loc_result, rois)
 
         pbar.postfix[1]["time"] = toc + pbar._time() - pbar.start_t
         pbar.update()
@@ -133,21 +138,21 @@ class H5Writer(Writer):
         self,
         param: RunParameters,
         filename: str,
-        res: PSFResult,
-        locres: LocResResult,
+        res: dict,
+        locres: LocalizationResult,
         rois: ROIsResult,
     ) -> None:
-        """Write result dataclasses to an HDF5 file.
+        """Write result dicts to an HDF5 file.
 
         Parameters
         ----------
-        param : RunParameters or DictConfig
+        param : RunParameters
             Experiment parameters (serialised as a JSON attribute).
         filename : str
             Output path.
-        res : PSFResult
-            PSF fitting result.
-        locres : LocResResult
+        res : dict
+            PSF fitting result dict.
+        locres : LocalizationResult
             Localization result.
         rois : ROIsResult
             ROI data.
@@ -156,44 +161,11 @@ class H5Writer(Writer):
         with h5.File(filename, "w") as f:
             f.attrs["params"] = json.dumps(param_dict)
             self._write_group(f.create_group("locres"), locres.to_dict())
-            self._write_group(f.create_group("res"), res.to_dict())
+            self._write_group(f.create_group("res"), res)
             self._write_group(f.create_group("rois"), rois.to_dict())
 
     # ── Internal helpers ─────────────────────────────────────────────────
 
-    @staticmethod
-    def _build_locres(
-        loc_result, coeff, coeff_reverse, fourier_domain_positions
-    ) -> LocResResult:
-        """Assemble the localization result for HDF5 storage."""
-        from .learning.psf_variables import Positions
-
-        loc = loc_result.positions
-        if isinstance(loc, dict):
-            loc = Positions(
-                x=loc.get("x"), y=loc.get("y"), z=loc.get("z"),
-                zast=loc.get("zast"),
-            )
-
-        loc_fd_obj = None
-        if fourier_domain_positions is not None:
-            if isinstance(fourier_domain_positions, dict):
-                loc_fd_obj = Positions(
-                    x=fourier_domain_positions.get("x"), y=fourier_domain_positions.get("y"), z=fourier_domain_positions.get("z"),
-                )
-            else:
-                loc_fd_obj = fourier_domain_positions
-
-        return LocResResult(
-            mle_parameters=loc_result.parameters,
-            cramer_rao_bounds=loc_result.crlb,
-            log_likelihoods=loc_result.log_likelihood,
-            spline_coefficients=coeff,
-            spline_coefficients_per_bead=loc_result.spline_coefficients,
-            localized_positions=loc,
-            spline_coefficients_reversed=coeff_reverse,
-            fourier_domain_positions=loc_fd_obj,
-        )
     def _write_group(self, group: h5.Group, data: dict) -> None:
         """Recursively write a dict into an HDF5 group."""
         for k, v in data.items():
@@ -205,18 +177,35 @@ class H5Writer(Writer):
                 group[k] = v
 
 
-
 # ── Module-level helpers ─────────────────────────────────────────────────
 
 
+def _build_result_dict(
+    learning_result: ZernikePSFResult,
+    psf_model: PSFInterface,
+    dataobj: PreprocessedImageDataInterface,
+) -> dict:
+    """Build the result dict for HDF5 storage from a ZernikePSFResult.
 
-def generate_cspline(res: PSFResult, keyname: str):
-    if keyname not in res:
-        return []
-    model_image = res[keyname]
-    offset = np.min(model_image)
-    Imd = model_image - offset
-    normf = np.median(np.sum(Imd, axis=(-1, -2)))
-    Imd = Imd / normf
-    coeff = psf2cspline_np(Imd)
-    return coeff.astype(np.float32)
+    Combines the fitting result with additional data from the PSF model
+    and data object.
+    """
+    return {
+        "fitted_positions": learning_result.positions,
+        "fitted_backgrounds": np.squeeze(learning_result.backgrounds),
+        "fitted_intensities": np.squeeze(learning_result.intensities),
+        "psf_model_image_with_bead": learning_result.psf_model_image_with_bead,
+        "psf_model_image": learning_result.psf_model_image,
+        "pupil": learning_result.pupil,
+        "zernike_coefficients": np.array([
+            np.squeeze(learning_result.zernike_magnitude),
+            np.squeeze(learning_result.zernike_phase),
+        ]),
+        "gaussian_blur_sigma": np.squeeze(learning_result.sigma) / np.pi,
+        "drift_rate": learning_result.drift_xy,
+        "model_image_offset": np.min(learning_result.psf_model_image),
+        "zernike_polynomial_basis": psf_model.zernike_polynomial_basis,
+        "apodization": psf_model.apodization,
+        "all_roi_centers": dataobj.roi_centers_all,
+        "selected_roi_centers": dataobj.roi_centers,
+    }

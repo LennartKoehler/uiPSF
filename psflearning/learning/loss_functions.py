@@ -1,12 +1,12 @@
 """
 Copyright (c) 2022      Ries Lab, EMBL, Heidelberg, Germany
-All rights reserved     
+All rights reserved
 
 @author: Sheng Liu, Jonas Hellgoth
 
 Loss functions for PSF optimization. Each function receives:
     - model: Forward PSF images
-    - data: Actual measured images  
+    - data: Actual measured images
     - variables: List of optimizable parameters (see psf_variables.py for structure)
     - mu: Regularization weight
     - w: Loss function weights
@@ -14,19 +14,19 @@ Loss functions for PSF optimization. Each function receives:
 
 import tensorflow as tf
 
-from .psf_variables import ZernikeLossVariables
+from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFVariables
 
 
 def mse_real(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss with regularization for Zernike PSF.
 
-    *variables* may be a :class:`ZernikeLossVariables` or a plain list
-    of tensors (7 elements, see :class:`ZernikeLossVariables`).
+    *variables* may be a :class:`ZernikePSFVariables` or a plain list
+    of tensors (7 elements, see :class:`ZernikePSFVariables`).
     """
     assert variables is not None and w is not None and mu is not None
     if isinstance(variables, list):
-        variables = ZernikeLossVariables.from_list(variables)
+        variables = ZernikePSFVariables.from_list(variables)
 
     mydiff = model - data
     mydiff = mydiff[:, 1:-1]
@@ -41,10 +41,10 @@ def mse_real(model, data, variables=None, mu=None, w=None):
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
 
-    zernike_magnitude = variables.zernike_magnitude
-    zernike_phase = variables.zernike_phase
-    background = variables.backgrounds
-    intensity = variables.intensities
+    zernike_magnitude = variables.zernike_magnitude.value
+    zernike_phase = variables.zernike_phase.value
+    background = variables.backgrounds.value
+    intensity = variables.intensities.value
 
     gxymean = tf.reduce_mean(tf.abs(zernike_phase))
     s = tf.math.reduce_sum(
@@ -77,27 +77,20 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
     """
     Mean squared error loss for Zernike PSF.
 
-    Accepts either a :class:`ZernikeLossVariables` (or
+    Accepts either a :class:`ZernikePSFVariables` (or
     ``ZernikePSFVariables``) object or a plain list of tensors.
     The plain list form is used by the L-BFGS-B optimizer batching loop,
     which passes raw tensors for gradient tracking.
     """
     assert variables is not None and w is not None and mu is not None
     if isinstance(variables, list):
-        variables = ZernikeLossVariables.from_list(variables)
+        variables = ZernikePSFVariables.from_list(variables)
 
-    if hasattr(variables, 'value'):
-        background = variables.backgrounds.value
-        intensity = variables.intensities.value
-        zernike_magnitude = variables.zernike_magnitude.value
-        sigma = variables.sigma.value
-        drift_xy = variables.drift_xy.value
-    else:
-        background = variables.backgrounds
-        intensity = variables.intensities
-        zernike_magnitude = variables.zernike_magnitude
-        sigma = variables.sigma
-        drift_xy = variables.drift_xy
+    background = variables.backgrounds.value
+    intensity = variables.intensities.value
+    zernike_magnitude = variables.zernike_magnitude.value
+    sigma = variables.sigma.value
+    drift_xy = variables.drift_xy.value
 
     mydiff = model - data
 

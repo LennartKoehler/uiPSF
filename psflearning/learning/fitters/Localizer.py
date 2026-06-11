@@ -5,56 +5,34 @@ import numpy as np
 from ..loclib import localizationlib, LocalizationResult
 from ...io.param import RunParameters
 from omegaconf import DictConfig
-from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import Optional, Union
 
-
-@dataclass
-class LocalizationOutput:
-    """Result from Localizer.localize(), bundling the localization result
-    with the rejection metrics computed during localization."""
-    locres: Any
-    reject_metric: Optional[List[np.ndarray]] = None
-    minI: Optional[np.ndarray] = None
-
-
-"""
-Handles localization given a learned PSF model.
-
-Stateless with respect to data and PSF. All data, PSF model, ROIs,
-and forward images are passed explicitly to each method call.
-"""
 
 def localize(
-    pixelsize_z: np.ndarray,
+    pixelsize_z: float,
     psf_model_image: np.ndarray,
     rois: np.ndarray,
     param: Union[RunParameters, DictConfig],
     toc: Optional[float] = None,
 ) -> LocalizationResult:
-    """Perform localization using the learned PSF.
-
-    Pure localization -- no relearning.  For non-insitu PSF types the
-    localizer also computes rejection metrics accessible via
-    ``localizer.reject_metric`` and ``localizer.minI``.
+    """Perform localization using the learned PSF model.
 
     Parameters
     ----------
-    learner : PSFLearner
-        The learner instance with fitted PSF.
-    res : list
-        Learning result (optimized variables).
-    param : DictConfig
-        Experiment parameters.
+    pixelsize_z : float
+        Pixel size in z.
+    psf_model_image : np.ndarray
+        Learned PSF model image.
+    rois : np.ndarray
+        Measured ROI images.
+    param : RunParameters or DictConfig
+        Experiment parameters (uses ``param.usecuda``).
     toc : float, optional
-        End time from learning.
+        Start time for progress reporting.
 
     Returns
     -------
-    tuple of (Localizer, list, float)
-        ``(localizer, locres, toc)``
+    LocalizationResult
     """
     dll = localizationlib(usecuda=param.usecuda)
-    locres = dll.loc_ast(rois, psf_model_image, pixelsize_z, initz=None, start_time=toc)
-
-    return locres
+    return dll.loc_ast(rois, psf_model_image, pixelsize_z, initz=None, start_time=toc)

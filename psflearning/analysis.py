@@ -22,7 +22,7 @@ from dotted_dict import DottedDict
 from omegaconf import DictConfig
 from typing import Union
 
-from .learning.psf_variables import PSFInfo
+from .psf_registry import PSFInfo
 from .io.param import RunParameters
 
 
@@ -82,9 +82,8 @@ def _genpsf_single(psf_model, dataobj, f, p, Nz, stagepos):
     Zcoeff_phase = f.res.zernike_coefficients[1].reshape(
         f.res.zernike_coefficients[1].shape + (1, 1)
     )
-    psf_model.data = dataobj
 
-    psf_model.calpupilfield("scalar", Nz=Nz)
+    psf_model.calpupilfield(dataobj, "scalar", Nz=Nz)
     f.res.psf_model_image, _ = psf_model.genpsfmodel(sigma, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
 
 

@@ -25,7 +25,7 @@ class Reader:
     # ── Image loading ────────────────────────────────────────────────────
 
     def read_images(
-        self, param: Union[RunParameters, DictConfig], frange: Optional[Tuple[int, int]] = None
+        self, param: RunParameters, frange: Optional[Tuple[int, int]] = None
     ) -> np.ndarray:
         """Load raw image stacks from disk.
 
@@ -195,30 +195,6 @@ def _load_single_channel_pupil(psf_model, f: h5.File) -> None:
     res_group: h5.Group = f["res"]  # type: ignore[assignment]
     try:
         psf_model.initial_pupil = np.array(res_group["pupil"])  # type: ignore[index]
-    except (KeyError, OSError):
-        pass
-
-    try:
-        psf_model.z_offset = np.array(res_group["zoffset"])  # type: ignore[index]
-    except (KeyError, OSError):
-        pass
-
-    try:
-        psf_model.initial_psf_image = np.array(
-            res_group["I_model_reverse"]  # type: ignore[index]
-        ).astype(np.float32)
-    except (KeyError, OSError):
-        try:
-            psf_model.initial_psf_image = np.array(
-                res_group["I_model"]  # type: ignore[index]
-            ).astype(np.float32)
-        except (KeyError, OSError):
-            pass
-
-    try:
-        psf_model.initial_zernike_coefficients = np.array(
-            res_group["zernike_coeff"]  # type: ignore[index]
-        ).astype(np.float32)
     except (KeyError, OSError):
         pass
 

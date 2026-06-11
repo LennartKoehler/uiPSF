@@ -5,10 +5,27 @@ from abc import ABCMeta
 import numpy as np
 import tensorflow as tf
 from tensorflow import math as tfm
+from dataclasses import dataclass, field
 
 from .PSFInterface import PSFInterface
+
 from .. import utilities as im
-from .. import imagetools as nip
+
+@dataclass
+class OptimizationWeights:
+    """Scaling weights for optimization variables in ``PSFZernikeBased``.
+
+    Replaces the ``self.optimization_weights`` dict with keys ``"intensity"``,
+    ``"background"``, ``"drift"``, ``"zernikeMagnitude"``,
+    ``"zernikePhase"``.
+    """
+
+    intensity: float
+    background: float
+    drift: float
+    zernike_magnitude: float
+    zernike_phase: float
+
 
 
 class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
@@ -22,24 +39,24 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         - postprocess
 
     Expected instance attributes (set by subclasses or calpupilfield):
-        - data: PreprocessedImageDataInterface
-        - options: configuration object
+        - config: configuration object (RunParameters)
         - zernike_polynomial_basis: np.ndarray of Zernike polynomials (shape: [n_coeffs, xsz, xsz])
-        - Zrange: np.ndarray of z positions (shape: [Nz, 1, 1])
-        - kx, ky: k-space coordinates (complex)
-        - kz, kz_med: z-k-space coordinates (complex)
-        - aperture: binary pupil mask
+        - z_range: np.ndarray of z positions (shape: [Nz, 1, 1])
+        - frequency_x, frequency_y: k-space coordinates (complex)
+        - frequency_z, frequency_z_medium: z-k-space coordinates (complex)
+        - pupil_mask: binary pupil mask
         - apodization: apodization function
-        - paramxy: CZT parameters
-        - normf: normalization factor
+        - czt_parameters: CZT parameters
+        - normalization_factor: normalization factor
         - dipole_field: vector field for vector PSF (shape: [2, 3, xsz, xsz])
-        - kspace, kspace_x, kspace_y: frequency space arrays
+        - frequency_squared_x, frequency_squared_y: frequency space arrays for Gaussian blur
         - bead_kernel: complex bead kernel for convolution
-        - spherical_terms: indices for spherical harmonics masking
-        - n_max_mag: maximum Zernike order for magnitude
+        - spherical_noll_indices: Noll indices for spherical Zernike modes
+        - max_magnitude_order: maximum Zernike order for magnitude
     """
 
     __metaclass__ = ABCMeta
+
 
     def magnitude_phase_to_pupil(
         self,
@@ -59,24 +76,24 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         return tf.complex(
             pupil_mag * tfm.cos(pupil_phase),
             pupil_mag * tfm.sin(pupil_phase),
-        ) * self.aperture * self.apodization
+        ) * self.pupil_mask * self.apodization
 
     def _compute_phase(
         self,
         pos: tf.Tensor,
-        Zrange,
+        z_range,
         defocus,
-        kx,
-        ky,
-        kz,
-        kz_med):
+        frequency_x,
+        frequency_y,
+        frequency_z,
+        frequency_z_medium):
 
-        phiz = -1j * 2 * np.pi * kz * (pos[:, 0] + Zrange + defocus)
+        phiz = -1j * 2 * np.pi * frequency_z * (pos[:, 0] + z_range + defocus)
         if int(pos.shape[1]) > 3:
-            phixy = 1j * 2 * np.pi * ky * pos[:, 2] + 1j * 2 * np.pi * kx * pos[:, 3]
-            phiz = 1j * 2 * np.pi * (kz_med * pos[:, 1] - kz * (pos[:, 0] + Zrange))
+            phixy = 1j * 2 * np.pi * frequency_y * pos[:, 2] + 1j * 2 * np.pi * frequency_x * pos[:, 3]
+            phiz = 1j * 2 * np.pi * (frequency_z_medium * pos[:, 1] - frequency_z * (pos[:, 0] + z_range))
         else:
-            phixy = 1j * 2 * np.pi * ky * pos[:, 1] + 1j * 2 * np.pi * kx * pos[:, 2]
+            phixy = 1j * 2 * np.pi * frequency_y * pos[:, 1] + 1j * 2 * np.pi * frequency_x * pos[:, 2]
 
         phase_z = tf.exp(phiz)
         phase_xy = tf.exp(phixy)
@@ -103,7 +120,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         Returns:
             Complex pupil function.
         """
-        c1 = self.spherical_terms
+        c1 = self.spherical_noll_indices
         n_max = getattr(self, 'n_max_mag', 15)
         Nk = np.min(((n_max + 1) * (n_max + 2) // 2, self.zernike_polynomial_basis.shape[0]))
         mask = c1 < Nk
@@ -113,7 +130,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             pupil_mag = tf.reduce_sum(
                 self.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
-        elif self.options.model.symmetric_mag:
+        elif self.params.model.symmetric_mag:
             pupil_mag = tf.reduce_sum(
                 self.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
@@ -143,21 +160,21 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         Returns:
             Complex PSF field (after CZT propagation).
         """
-        if self.psftype == "vector":
+        if self.psf_type == "vector":
             I_res = tf.constant(0.0, dtype=tf.complex64)
             for h in self.dipole_field:
                 PupilFunction = pupil * phase_z * h
                 if phase_xy is not None:
                     PupilFunction = PupilFunction * phase_xy
-                propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.paramxy)
-                I_res += propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normf
+                propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.czt_parameters)
+                I_res += propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normalization_factor
             return I_res
         else:
             PupilFunction = pupil * phase_z
             if phase_xy is not None:
                 PupilFunction = PupilFunction * phase_xy
-            propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.paramxy)
-            return propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normf
+            propagated_psf_amplitude = im.cztfunc1(PupilFunction, self.czt_parameters)
+            return propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * self.normalization_factor
 
     def compute_gaussian_filter(self, sigma: tf.Tensor | np.ndarray) -> tf.Tensor:
         """
@@ -170,8 +187,8 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
             Complex frequency-domain filter (normalized).
         """
         filter2 = tf.exp(
-            -2 * sigma[1] * sigma[1] * self.kspace_x
-            - 2 * sigma[0] * sigma[0] * self.kspace_y
+            -2 * sigma[1] * sigma[1] * self.frequency_squared_x
+            - 2 * sigma[0] * sigma[0] * self.frequency_squared_y
         )
         return tf.complex(filter2 / tf.reduce_max(filter2), 0.0)
 
@@ -281,18 +298,56 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
                 data_format="NHWC",
             )
 
-    def trim_z_padding(self, psf: tf.Tensor) -> tf.Tensor:
+    def _render_psf(
+        self,
+        pupil: tf.Tensor,
+        phase_z: tf.Tensor,
+        sigma: tf.Tensor | np.ndarray,
+        phase_xy: tf.Tensor | None = None,
+        use_bead_kernel: bool = True,
+        data=None,
+    ) -> tf.Tensor:
+        """Propagate a pupil through phase, blur, bin, and optionally trim z-padding.
+
+        This is the shared rendering pipeline used by both :meth:`calc_forward_images`
+        and :meth:`genpsfmodel`.
+
+        Args:
+            pupil: Complex pupil function.
+            phase_z: Z-propagation phase (complex exponential).
+            sigma: Blur sigma values (shape: [2]).
+            phase_xy: Optional XY phase factor for per-bead shifts.
+            use_bead_kernel: Whether to convolve with the bead kernel.
+            data: If provided, z-padding is trimmed using this data object.
+
+        Returns:
+            Rendered PSF intensity (last dimension squeezed, z-padding trimmed if *data* given).
+        """
+        propagated = self.propagate_pupil(pupil, phase_z, phase_xy)
+        blurred = self.apply_blur_3d(propagated, sigma, use_bead_kernel=use_bead_kernel)
+        binned = self.bin_image_3d(blurred, self.params.model.bin)
+        psf = binned[..., 0]
+        if data is not None:
+            psf = self.trim_z_padding(psf, data)
+        return psf
+
+    def trim_z_padding(
+        self,
+        psf: tf.Tensor,
+        data,
+    ) -> tf.Tensor:
         """
         Trim z-padding from a PSF volume using bead kernel size.
 
         Args:
             psf: Input PSF tensor with shape (N, Nz, H, W) or similar.
+            data: PreprocessedImageData providing measured ROI shape.
 
         Returns:
             Trimmed PSF tensor.
         """
-        Nz = self.Zrange.shape[0]
-        st = (self.bead_kernel.shape[0] - self.data.measured_roi_images[0].shape[-3]) // 2
+        Nz = self.z_range.shape[0]
+        st = (self.bead_kernel.shape[0] - data.measured_roi_images[0].shape[-3]) // 2
         return psf[..., st : Nz - st, :, :]
 
     def interpolate_zernike_map(
@@ -329,7 +384,7 @@ class PSFZernikeBase(PSFInterface, metaclass=ABCMeta):
         )
         radius = tf.cast(
             0.5 * np.sqrt(H * H + W * W), tf.float32
-        ) * self.options.model.search_radius
+        ) * self.params.model.search_radius
         kernel = tfm.maximum(1.0 - dist / radius, 0.0)
         kernel = kernel / (tf.reduce_sum(kernel, axis=-1, keepdims=True) + 1e-12)
         zmap_exp = tf.transpose(zmap)

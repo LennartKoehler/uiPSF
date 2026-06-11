@@ -9,8 +9,8 @@ import scipy.special as spf
 from typing import Any, List
 
 from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from psflearning.io.param import OptionParams
 from .. import utilities as im
-from .. import imagetools as nip
 from enum import Enum
 
 class ParameterScope(Enum):
@@ -99,14 +99,6 @@ class LearnablePSFParameters(ABC):
         """Number of emitters/beads being fitted."""
         ...
 
-    @abstractmethod
-    def filter_by_mask(self, mask: np.ndarray) -> LearnablePSFParameters:
-        """Return a new instance with per-bead (NFIT) parameters filtered by *mask*.
-
-        Shared parameters are kept unchanged.  *mask* is a boolean array
-        of shape ``(n_beads,)``.
-        """
-        ...
 
 
 
@@ -117,33 +109,30 @@ class PSFInterface(ABC):
     at a specific position. They also provide initial values and postprocessing of the variables for the fitter,
     since they depend on the nature of the psf model/parametrization.
     """
-
-    data: PreprocessedImageDataInterface
+    def __init__(self, params: OptionParams):
+        self.params: OptionParams = params
+        pass
     bead_kernel: Any
-    options: Any
-    aperture: Any
+    pupil_mask: Any
     apodization: Any
-    paramxy: Any
-    normf: Any
-    Zrange: Any
-    kx: Any
-    ky: Any
-    kz: Any
-    kz_med: Any
+    czt_parameters: Any
+    normalization_factor: Any
+    z_range: Any
+    frequency_x: Any
+    frequency_y: Any
+    frequency_z: Any
+    frequency_z_medium: Any
     zernike_polynomial_basis: Any
-    zv: Any
-    kxv: Any
-    kyv: Any
-    kzv: Any
-    kspace: Any
-    kspace_x: Any
-    kspace_y: Any
-    spherical_terms: Any
+    z_positions: Any
+    frequency_x_view: Any
+    frequency_y_view: Any
+    frequency_z_view: Any
+    frequency_squared_x: Any
+    frequency_squared_y: Any
+    spherical_noll_indices: Any
     dipole_field: Any
     defocus: Any
-    psftype: str
-    imgcenter: Any
-    pupil_normalization_factor: Any
+    psf_type: str
 
     @abstractmethod
     def calc_initials(self, data: PreprocessedImageDataInterface) -> list:
@@ -153,14 +142,14 @@ class PSFInterface(ABC):
         raise NotImplementedError("You need to implement a 'calc_initials' method in your psf class.")
 
     @abstractmethod
-    def calc_forward_images(self, variables) -> tf.Tensor:
+    def calc_forward_images(self, variables, data=None) -> tf.Tensor:
         """
         Calculates the forward images.
         """
         raise NotImplementedError("You need to implement a 'calc_forward_images' method in your psf class.")
 
     @abstractmethod
-    def postprocess(self, variables) -> Any:
+    def postprocess(self, data, variables) -> Any:
         """
         Postprocesses the optimized variables. For example, normalizes the psf or calculates global positions.
         """
@@ -182,39 +171,38 @@ class PSFInterface(ABC):
             self = pickle.load(f)
         return self
 
-    def calpupilfield(self, fieldtype: str = 'vector', Nz: int | None = None, datatype: str = 'bead') -> None:
+    def calpupilfield(self, data: PreprocessedImageDataInterface, fieldtype: str = 'vector', Nz: int | None = None, datatype: str = 'bead') -> None:
         """
         Calculate pupil field and related optical quantities for PSF modeling.
         """
         if Nz is None:
             Nz = self.bead_kernel.shape[0]
         assert Nz is not None
-        bin = self.options.model.bin
-        Lx = self.data.measured_roi_images.shape[-1]*bin
-        Ly = self.data.measured_roi_images.shape[-2]*bin
-        Lz = self.data.measured_roi_images.shape[-3]
-        xsz =self.options.model.pupilsize
+        bin = self.params.model.bin
+        Lx = data.measured_roi_images.shape[-1]*bin
+        Ly = data.measured_roi_images.shape[-2]*bin
+        Lz = data.measured_roi_images.shape[-3]
+        xsz =self.params.model.pupilsize
 
         xrange = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx)
         [xx,yy] = np.meshgrid(xrange,xrange)
         pkx = xx/Lx
+        self.frequency_squared_x = np.float32(pkx*pkx)
         pky = yy/Lx
-        self.kspace = np.float32(pkx*pkx+pky*pky)
-        self.kspace_x = np.float32(pkx*pkx)
-        self.kspace_y = np.float32(pky*pky)
+        self.frequency_squared_y = np.float32(pky*pky)
 
-        pixelsize_x = self.data.pixelsize_x/bin
-        pixelsize_y = self.data.pixelsize_y/bin
-        NA = self.options.imaging.NA
-        emission_wavelength = self.options.imaging.emission_wavelength
-        nimm = self.options.imaging.RI.imm
-        nmed = self.options.imaging.RI.med
-        ncov = self.options.imaging.RI.cov
-        n_max = self.options.model.n_max
+        pixelsize_x = data.pixelsize_x/bin
+        pixelsize_y = data.pixelsize_y/bin
+        NA = self.params.imaging.NA
+        emission_wavelength = self.params.imaging.emission_wavelength
+        nimm = self.params.imaging.RI.imm
+        nmed = self.params.imaging.RI.med
+        ncov = self.params.imaging.RI.cov
+        n_max = self.params.model.n_max
         Zk = im.genZern1(n_max,xsz)
 
         n1 = np.array(range(-1,n_max,2))
-        self.spherical_terms = (n1+1)*(n1+2)//2
+        self.spherical_noll_indices = (n1+1)*(n1+2)//2
 
         pupilradius = 1
         krange = np.linspace(-pupilradius+pupilradius/xsz,pupilradius-pupilradius/xsz,xsz)
@@ -246,7 +234,7 @@ class PSFInterface(ABC):
         hy = sin_phi*pvec+cos_phi*svec
         h = np.concatenate((hx,hy),axis=0)
         self.dipole_field = np.complex64(h)
-        if self.options.model.with_apoid:
+        if self.params.model.with_apoid:
             apoid = np.lib.scimath.sqrt(cos_imm)/cos_med
             if fieldtype=='scalar':
                 apoid=apoid*Tavg
@@ -254,66 +242,55 @@ class PSFInterface(ABC):
             apoid = 1
 
         kpixelsize = 2.0*NA/emission_wavelength/xsz
-        self.paramxy = im.prechirpz1(kpixelsize,pixelsize_x,pixelsize_y,xsz,Lx)
+        self.czt_parameters = im.prechirpz1(kpixelsize,pixelsize_x,pixelsize_y,xsz,Lx)
 
-        self.aperture = np.complex64(kr<1)
-        pupil = self.aperture*apoid
+        self.pupil_mask = np.complex64(kr<1)
+        pupil = self.pupil_mask*apoid
         pupil = tf.cast(pupil,tf.complex64)
         if fieldtype=='scalar':
-            propagated_psf_amplitude = im.cztfunc1(pupil,self.paramxy)
-            self.normf = np.complex64(1/np.sum(propagated_psf_amplitude*np.conj(propagated_psf_amplitude)))
+            propagated_psf_amplitude = im.cztfunc1(pupil,self.czt_parameters)
+            self.normalization_factor = np.complex64(1/np.sum(propagated_psf_amplitude*np.conj(propagated_psf_amplitude)))
         else:
             I_res = 0.0
             for h in self.dipole_field:
                 PupilFunction = pupil*h
-                propagated_psf_amplitude = im.cztfunc1(PupilFunction,self.paramxy)
+                propagated_psf_amplitude = im.cztfunc1(PupilFunction,self.czt_parameters)
                 I_res += propagated_psf_amplitude*tf.math.conj(propagated_psf_amplitude)
-            self.normf = np.complex64(1/np.sum(I_res))
-        self.Zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
-        self.kx = np.complex64(xx*NA/emission_wavelength)*pixelsize_x
-        self.ky = np.complex64(yy*NA/emission_wavelength)*pixelsize_y
-        self.kz = np.complex64(kz)*self.data.pixelsize_z
-        self.kz_med = np.complex64(kz_med)*self.data.pixelsize_z
-        self.k = np.complex64(nmed/emission_wavelength)*self.data.pixelsize_z
+            self.normalization_factor = np.complex64(1/np.sum(I_res))
+        self.z_range = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
+        self.frequency_x = np.complex64(xx*NA/emission_wavelength)*pixelsize_x
+        self.frequency_y = np.complex64(yy*NA/emission_wavelength)*pixelsize_y
+        self.frequency_z = np.complex64(kz)*data.pixelsize_z
+        self.frequency_z_medium = np.complex64(kz_med)*data.pixelsize_z
         self.apodization = np.complex64(apoid)
-        self.nimm = nimm
-        self.nmed = nmed
         self.zernike_polynomial_basis = np.float32(Zk)
 
-        Lx = self.data.measured_roi_images.shape[-1]
-        Ly = self.data.measured_roi_images.shape[-2]
-        Lz = self.data.measured_roi_images.shape[-3]
+        Lx = data.measured_roi_images.shape[-1]
+        Ly = data.measured_roi_images.shape[-2]
+        Lz = data.measured_roi_images.shape[-3]
 
-        self.zv = np.linspace(0,Lz-1,Lz,dtype=np.float32).reshape(Lz,1,1)-Lz/2
-        self.kxv = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx,dtype=np.float32)/Lx
-        self.kyv = (np.linspace(-Ly/2+0.5,Ly/2-0.5,Ly,dtype=np.float32).reshape(Ly,1))/Ly
-        self.kzv = (np.linspace(-Lz/2+0.5,Lz/2-0.5,Lz,dtype=np.float32).reshape(Lz,1,1))/Lz
+        self.z_positions = np.linspace(0,Lz-1,Lz,dtype=np.float32).reshape(Lz,1,1)-Lz/2
+        self.frequency_x_view = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx,dtype=np.float32)/Lx
+        self.frequency_y_view = (np.linspace(-Ly/2+0.5,Ly/2-0.5,Ly,dtype=np.float32).reshape(Ly,1))/Ly
+        self.frequency_z_view = (np.linspace(-Lz/2+0.5,Lz/2-0.5,Lz,dtype=np.float32).reshape(Lz,1,1))/Lz
 
 
-    def calnorm(self, pupil: tf.Tensor) -> tf.Tensor:
-        """
-        Calculate the normalization factor from a pupil function.
-        """
-        propagated_psf_amplitude = im.cztfunc1(pupil,self.paramxy)
-        normf = tf.math.real(tf.reduce_sum(propagated_psf_amplitude*tf.math.conj(propagated_psf_amplitude)))
-        return normf
-
-    def gen_bead_kernel(self, isVolume: bool = False) -> None:
+    def gen_bead_kernel(self, data: PreprocessedImageDataInterface, isVolume: bool = False) -> None:
         """
         Generate a bead kernel for convolution with the PSF model.
         """
-        pixelsize_z = self.data.pixelsize_z
-        bead_radius = self.data.bead_radius
+        pixelsize_z = data.pixelsize_z
+        bead_radius = data.bead_radius
         if isVolume:
-            Nz = self.data.measured_roi_images.shape[-3]
+            Nz = data.measured_roi_images.shape[-3]
             bin = 1
         else:
-            Nz = self.data.measured_roi_images.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
-            bin = self.options.model.bin
+            Nz = data.measured_roi_images.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
+            bin = self.params.model.bin
 
-        Lx = self.data.measured_roi_images.shape[-1]*bin
-        pixelsize_x = self.data.pixelsize_x/bin
-        pixelsize_y = self.data.pixelsize_y/bin
+        Lx = data.measured_roi_images.shape[-1]*bin
+        pixelsize_x = data.pixelsize_x/bin
+        pixelsize_y = data.pixelsize_y/bin
 
         xrange = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx)+1e-6
         zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz)
@@ -338,49 +315,32 @@ class PSFInterface(ABC):
         return
 
 
-    def applyPhaseRamp(self, img: tf.Tensor, shiftvec: tf.Tensor) -> tf.Tensor:
-        """
-        Applies a frequency ramp as a phase factor according to the shiftvec to a Fourier transform to shift the image.
-        Identical to implementation in InverseModelling. Just removed if-statement (0) that does not make sense for me and prevent my code to work correctly.
-        img: input Fourier transform tensor
-        shiftvec: real-space shifts
-        """
-        res = im.totensor(img)
-        myshape = im.shapevec(res)
-        ShiftDims = int(shiftvec.shape[-1])
-        for d in range(1, ShiftDims+1):
-            myshifts = shiftvec[..., -d]
-            for ed in range(len(myshape) - len(myshifts.shape)):
-                myshifts = tf.expand_dims(myshifts,-1)
-            res = res * tf.exp(tf.complex(im.totensor(0.0), 2.0 * np.pi * myshifts * nip.ramp1D(myshape[-d], ramp_dim = -d, freq='ftfreq')))
-        return res
-
     def phaseRamp(self, pos: tf.Tensor) -> tf.Tensor:
         """
         Compute a phase ramp factor for the given positions.
         """
         if pos.shape[1]==2:
-            shiftphase = 1j*2*np.pi*(self.kxv*pos[:,1]+self.kyv*pos[:,0])
+            shiftphase = 1j*2*np.pi*(self.frequency_x_view*pos[:,1]+self.frequency_y_view*pos[:,0])
         if pos.shape[1]==3:
-            shiftphase = 1j*2*np.pi*(self.kxv*pos[:,2]+self.kyv*pos[:,1]+self.kzv*pos[:,0])
+            shiftphase = 1j*2*np.pi*(self.frequency_x_view*pos[:,2]+self.frequency_y_view*pos[:,1]+self.frequency_z_view*pos[:,0])
 
         return tf.exp(shiftphase)
 
-    def applyDrift(self, psfin: tf.Tensor, gxy: tf.Tensor) -> tf.Tensor:
+    def applyDrift(self, psfin: tf.Tensor, gxy: tf.Tensor, data: PreprocessedImageDataInterface) -> tf.Tensor:
         """
         Apply drift or shift correction to a PSF using skew or linear drift.
         """
         otf2d = im.fft2d(tf.complex(psfin,0.0))
-        if self.data.skew_const:
+        if data.skew_const:
             # drift
-            sk = np.array([self.data.skew_const],dtype=np.float32)+np.zeros(gxy.shape,dtype=np.float32)
+            sk = np.array([data.skew_const],dtype=np.float32)+np.zeros(gxy.shape,dtype=np.float32)
             sk = np.reshape(sk,sk.shape+(1,1,1))
-            dxy = tf.complex(-sk*self.zv+tf.round(sk*self.zv),0.0)
+            dxy = tf.complex(-sk*self.z_positions+tf.round(sk*self.z_positions),0.0)
             shiftphase = self.phaseRamp(dxy)
 
         else:
             # shift
-            gxy = tf.complex(tf.reshape(gxy,gxy.shape+(1,1,1)),0.0)*self.zv
+            gxy = tf.complex(tf.reshape(gxy,gxy.shape+(1,1,1)),0.0)*self.z_positions
             shiftphase = self.phaseRamp(gxy)
         psf_shift = tf.math.real(im.ifft2d(otf2d*shiftphase))
 
