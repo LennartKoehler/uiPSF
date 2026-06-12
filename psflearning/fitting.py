@@ -57,7 +57,7 @@ def create_learner(
     """
     lossfun = psf_info.loss_fun
     w = list(param.model.loss_weight.values())
-    optimizer = L_BFGS_B(maxiter=param.runtime.iteration, batch_size=param.runtime.batch_size)
+    optimizer = L_BFGS_B(maxiter=param.runtime.max_iterations, batch_size=param.runtime.batch_size)
     return PSFLearner(optimizer, lossfun, loss_weight=w)
 
 

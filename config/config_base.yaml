@@ -1,30 +1,30 @@
 Params:
   io:
-    datapath: ""
+    data_path: ""
     keyword: "Default."
-    savename: ""
+    output_path: ""
     subfolder: ""
     format: .tif
-    varname: ""
+    variable_name: ""
     filelist: []
 
   data:
-    gain: 0.2
-    ccd_offset: 398.6
-    stage_mov_dir: normal
-    swapxy: false
+    camera_gain: 0.2
+    camera_offset: 398.6
+    stage_movement_direction: normal
+    swap_xy_dimensions: false
     emission_wavelength: 0.68
-    NA: 1.43
-    RI:
-      imm: 1.516
-      med: 1.335
-      cov: 1.516
+    numerical_aperture: 1.43
+    refractive_indices:
+      immersion: 1.516
+      medium: 1.335
+      coverslip: 1.516
     pixel_size:
       x: 0.127
       y: 0.116
       z: 0.05
-    LLS:
-      skew_const: [0,0]
+    lattice_light_sheet:
+      skew_translation_per_slice: [0,0]
 
   selection:
     roi:
@@ -43,37 +43,37 @@ Params:
       z_step: 1
 
   model:
-    PSFtype: zernike
+    psf_type: zernike
     psf:
-      pupilsize: 64
-      n_max: 8
-      blur_sigma: 0.5
-      with_apoid: true
-      const_pupilmag: false
-      symmetric_mag: false
-      with_IMM: false
-      init_pupil_file: ""
+      pupil_size: 64
+      max_zernike_order: 8
+      extra_blur_sigma: 0.5
+      include_apodization: true
+      constant_pupil_magnitude: false
+      radially_symmetric_magnitude: false
+      include_index_mismatch: false
+      initial_pupil_file_path: ""
       estimate_drift: false
-      var_photon: false
-      bin: 2
+      estimate_photon_variation: false
+      pixel_upsampling_factor: 2
     loss_weight:
-      mse1: 1
-      mse2: 1
+      mse_weight: 1
+      modified_mse_weight: 1
       smooth: 0
       edge: 0.01
-      psf_min: 1
-      bg_min: 1
-      photon_min: 1
-      Inorm: 0
-      gxy_min: 10
+      psf_positivity_weight: 1
+      background_positivity_weight: 1
+      photon_positivity_weight: 1
+      intensity_normalization_weight: 0
+      lateral_drift_weight: 10
     rej_threshold:
       bias_z: 0.99
       mse: 0.8
       photon: 1.5
 
   runtime:
-    usecuda: true
+    use_cuda: true
     batch_size: 1600
-    iteration: 200
-    relearn: true
-    plotall: false
+    max_iterations: 200
+    enable_relearning: true
+    plot_all_steps: false

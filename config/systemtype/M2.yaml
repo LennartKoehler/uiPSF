@@ -5,13 +5,13 @@ Params:
     pixel_size:
       x: 0.127
       y: 0.116
-    swapxy: true
+    swap_xy_dimensions: true
     emission_wavelength: 0.6
-    NA: 1.43
-    RI:
-      imm: 1.516
-      med: 1.335
-      cov: 1.516
+    numerical_aperture: 1.43
+    refractive_indices:
+      immersion: 1.516
+      medium: 1.335
+      coverslip: 1.516
   selection:
     roi:
       roi_size: [25,25]

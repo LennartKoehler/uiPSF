@@ -30,22 +30,22 @@ class DataLoader(ABC):
     def get_file_list(self) -> List[str]:
         """Return a list of file paths matching the parameter configuration.
 
-        Uses ``param.io.datapath``, ``param.io.keyword``, ``param.io.format``, and
+        Uses ``param.io.data_path``, ``param.io.keyword``, ``param.io.format``, and
         optionally ``param.io.subfolder`` to build a glob pattern and collect
         matching files.
         """
         param = self.param
         if not param.io.subfolder:
-            filelist = glob.glob(param.io.datapath+'/*'+param.io.keyword+'*'+param.io.format)
+            filelist = glob.glob(param.io.data_path+'/*'+param.io.keyword+'*'+param.io.format)
         else:
             filelist = []
-            folderlist = glob.glob(param.io.datapath+'/*'+param.io.subfolder+'*/')
+            folderlist = glob.glob(param.io.data_path+'/*'+param.io.subfolder+'*/')
             for f in folderlist:
                 filelist.append(glob.glob(f+'/*'+param.io.keyword+'*'+param.io.format)[0])
 
         if not filelist:
             raise FileNotFoundError(
-                f"No files matching {param.io.datapath}/*{param.io.keyword}*{param.io.format}"
+                f"No files matching {param.io.data_path}/*{param.io.keyword}*{param.io.format}"
             )
         return sorted(filelist)
 
@@ -75,7 +75,7 @@ class TiffDataLoader(DataLoader):
         for filename in filelist:
             logging.info("Loading: %s", filename)
             dat = np.squeeze(io.imread(filename).astype(np.float32))
-            dat = (dat-param.data.ccd_offset)*param.data.gain
+            dat = (dat-param.data.camera_offset)*param.data.camera_gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 
@@ -89,7 +89,7 @@ class MatDataLoader(DataLoader):
         """Load MATLAB .mat data from *filelist* and return a stacked numpy array.
 
         Dataset keys ``'metadata'`` and ``'#refs#'`` are automatically
-        excluded.  If ``param.io.varname`` is set it is used as the dataset
+        excluded.          If ``param.io.variable_name`` is set it is used as the dataset
         name; otherwise all remaining keys are loaded.
         """
         param = self.param
@@ -97,8 +97,8 @@ class MatDataLoader(DataLoader):
         for filename in filelist:
             logging.info("Loading: %s", filename)
             fdata = h5.File(filename,'r')
-            if param.io.varname:
-                name = [param.io.varname]
+            if param.io.variable_name:
+                name = [param.io.variable_name]
             else:
                 name = list(fdata.keys())
             try:
@@ -111,7 +111,7 @@ class MatDataLoader(DataLoader):
                 pass
 
             dat = np.squeeze(np.array(fdata.get(name[0])).astype(np.float32))
-            dat = (dat-param.data.ccd_offset)*param.data.gain
+            dat = (dat-param.data.camera_offset)*param.data.camera_gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 
@@ -127,7 +127,7 @@ class CziDataLoader(DataLoader):
         imageraw = []
         for filename in filelist:
             dat = np.squeeze(czi.imread(filename).astype(np.float32))
-            dat = (dat-param.data.ccd_offset)*param.data.gain
+            dat = (dat-param.data.camera_offset)*param.data.camera_gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 

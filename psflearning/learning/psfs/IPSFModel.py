@@ -163,11 +163,11 @@ class IPSFModel(ABC):
         Returns:
             PupilField with all precomputed optical quantities.
         """
-        bin = params.model.psf.bin
-        Lx = data.measured_roi_images.shape[-1]*bin
-        Ly = data.measured_roi_images.shape[-2]*bin
+        pixel_upsampling_factor = params.model.psf.pixel_upsampling_factor
+        Lx = data.measured_roi_images.shape[-1]*pixel_upsampling_factor
+        Ly = data.measured_roi_images.shape[-2]*pixel_upsampling_factor
         Lz = data.measured_roi_images.shape[-3]
-        xsz = params.model.psf.pupilsize
+        xsz = params.model.psf.pupil_size
 
         xrange = np.linspace(-Lx/2+0.5, Lx/2-0.5, Lx)
         [xx,yy] = np.meshgrid(xrange,xrange)
@@ -176,14 +176,14 @@ class IPSFModel(ABC):
         pky = yy/Lx
         frequency_squared_y = np.float32(pky*pky)
 
-        pixelsize_x = data.pixelsize_x/bin
-        pixelsize_y = data.pixelsize_y/bin
-        NA = params.data.NA
+        pixelsize_x = data.pixelsize_x/pixel_upsampling_factor
+        pixelsize_y = data.pixelsize_y/pixel_upsampling_factor
+        NA = params.data.numerical_aperture
         emission_wavelength = params.data.emission_wavelength
-        nimm = params.data.RI.imm
-        nmed = params.data.RI.med
-        ncov = params.data.RI.cov
-        n_max = params.model.psf.n_max
+        nimm = params.data.refractive_indices.immersion
+        nmed = params.data.refractive_indices.medium
+        ncov = params.data.refractive_indices.coverslip
+        n_max = params.model.psf.max_zernike_order
         Zk = im.genZern1(n_max,xsz)
 
         n1 = np.array(range(-1,n_max,2))
@@ -219,7 +219,7 @@ class IPSFModel(ABC):
         hy = sin_phi*pvec+cos_phi*svec
         h = np.concatenate((hx,hy),axis=0)
         dipole_field = np.complex64(h)
-        if params.model.psf.with_apoid:
+        if params.model.psf.include_apodization:
             apoid = np.lib.scimath.sqrt(cos_imm)/cos_med
             if psf_type=='scalar':
                 apoid=apoid*Tavg
@@ -291,14 +291,14 @@ class IPSFModel(ABC):
         bead_radius = data.bead_radius
         if isVolume:
             Nz = data.measured_roi_images.shape[-3]
-            bin = 1
+            pixel_upsampling_factor = 1
         else:
             Nz = data.measured_roi_images.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
-        bin = params.model.psf.bin
+        pixel_upsampling_factor = params.model.psf.pixel_upsampling_factor
 
-        Lx = data.measured_roi_images.shape[-1]*bin
-        pixelsize_x = data.pixelsize_x/bin
-        pixelsize_y = data.pixelsize_y/bin
+        Lx = data.measured_roi_images.shape[-1]*pixel_upsampling_factor
+        pixelsize_x = data.pixelsize_x/pixel_upsampling_factor
+        pixelsize_y = data.pixelsize_y/pixel_upsampling_factor
 
         xrange = np.linspace(-Lx/2+0.5,Lx/2-0.5,Lx)+1e-6
         zrange = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz)

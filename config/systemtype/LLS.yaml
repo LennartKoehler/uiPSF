@@ -5,14 +5,14 @@ Params:
     pixel_size:
       x: 0.104
       y: 0.104
-    LLS:
-      skew_const: [0,-0.7845]
+    lattice_light_sheet:
+      skew_translation_per_slice: [0,-0.7845]
     emission_wavelength: 0.6
-    NA: 1.1
-    RI:
-      imm: 1.334
-      med: 1.334
-      cov: 1.334
+    numerical_aperture: 1.1
+    refractive_indices:
+      immersion: 1.334
+      medium: 1.334
+      coverslip: 1.334
   selection:
     roi:
       roi_size: [37,27,27]

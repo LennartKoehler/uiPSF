@@ -19,25 +19,25 @@ writer = DefaultWriter()
 param = io.param.load_params(psftype='zernike', sysfile='M2')
 
 # --- overwrite some params ---
-param.io.datapath = main_data_dir+'/1ch_40nm_bead'
-param.io.savename = param.io.datapath+'psfmodel'
+param.io.data_path = main_data_dir+'/1ch_40nm_bead'
+param.io.output_path = param.io.data_path+'psfmodel'
 param.io.keyword = 'Pos'
 param.io.subfolder = 'Pos'
-param.data.gain = 0.22
-param.data.ccd_offset = 400
+param.data.camera_gain = 0.22
+param.data.camera_offset = 400
 param.selection.FOV.z_step = 1
 param.data.pixel_size.z = 0.05
 param.selection.roi.max_bead_number = 20
 param.selection.roi.bead_radius = 0.025
 param.runtime.batch_size = 30
 param.data.emission_wavelength = 0.6
-param.runtime.relearn = True
+param.runtime.enable_relearning = True
 
 
 images = reader.read_images(param)
 # -- RUN --
 parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run(param, images)
 # -- SAVE --
-parameters.io.savename = output_dir
+parameters.io.output_path = output_dir
 
 resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images)

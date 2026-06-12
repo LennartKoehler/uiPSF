@@ -144,7 +144,7 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
             pupil_mag = tf.reduce_sum(
                 pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
-        elif context.params.model.psf.symmetric_mag:
+        el        if context.params.model.psf.radially_symmetric_magnitude:
             pupil_mag = tf.reduce_sum(
                 pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
@@ -294,7 +294,7 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         """
         propagated = self.propagate_pupil(pupil, phase_z, context, phase_xy)
         blurred = self.apply_blur_3d(propagated, sigma, context, use_bead_kernel=use_bead_kernel)
-        binned = self.bin_image_3d(blurred, context.params.model.psf.bin)
+        binned = self.bin_image_3d(blurred, context.params.model.psf.pixel_upsampling_factor)
         psf = binned[..., 0]
         if data is not None:
             psf = self.trim_z_padding(psf, data, context)

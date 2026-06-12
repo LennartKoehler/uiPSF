@@ -85,7 +85,7 @@ class PSFLearningLib:
         psf_info = get_psf_info(parameters)
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
-        if parameters.runtime.relearn:
+        if parameters.runtime.enable_relearning:
             psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
         else:
             psf_model, learning_result, _, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
@@ -114,7 +114,7 @@ class PSFLearningLib:
         """
         roi_size = param.selection.roi.roi_size
         fov = list(param.selection.FOV.values())
-        skew_const = param.data.LLS.skew_const
+        skew_const = param.data.lattice_light_sheet.skew_translation_per_slice
 
         zstart = fov[-3]
         zend = images.shape[-3]+fov[-2]
@@ -146,7 +146,7 @@ class PSFLearningLib:
             pixelsize_y=param.data.pixel_size.y,
             pixelsize_z=param.data.pixel_size.z,
             bead_radius=param.selection.roi.bead_radius,
-            plot=param.runtime.plotall,
+            plot=param.runtime.plot_all_steps,
             padPSF=True,
             isVolume=False,
             skew_const=skew_param,

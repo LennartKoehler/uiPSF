@@ -1,12 +1,12 @@
 Params:
   model:
-    PSFtype: zernike_vector
+    psf_type: zernike_vector
     loss_weight:
       smooth: 0
-      gxy_min: 0.1
+      lateral_drift_weight: 0.1
     rej_threshold:
       bias_z: 3
       mse: 3
       photon: 1.5
     psf:
-      var_photon: true
+      estimate_photon_variation: true

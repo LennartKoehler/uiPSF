@@ -1,5 +1,5 @@
 Params:
   io:
-    datapath: ""
+    data_path: ""
     keyword: "Default."
-    savename: ""
+    output_path: ""

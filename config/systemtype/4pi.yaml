@@ -2,16 +2,16 @@ Params:
   io:
     format: .mat
   data:
-    stage_mov_dir: reverse
+    stage_movement_direction: reverse
     pixel_size:
       x: 0.129
       y: 0.129
     emission_wavelength: 0.6
-    NA: 1.35
-    RI:
-      imm: 1.406
-      med: 1.406
-      cov: 1.516
+    numerical_aperture: 1.35
+    refractive_indices:
+      immersion: 1.406
+      medium: 1.406
+      coverslip: 1.516
   selection:
     roi:
       roi_size: [21,21]

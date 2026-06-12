@@ -6,11 +6,11 @@ Params:
       x: 0.11
       y: 0.11
     emission_wavelength: 0.67
-    NA: 1.45
-    RI:
-      imm: 1.518
-      med: 1.33
-      cov: 1.518
+    numerical_aperture: 1.45
+    refractive_indices:
+      immersion: 1.518
+      medium: 1.33
+      coverslip: 1.518
   selection:
     roi:
       roi_size: [31,31]

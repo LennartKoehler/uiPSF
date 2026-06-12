@@ -6,11 +6,11 @@ Params:
       x: 0.12
       y: 0.12
     emission_wavelength: 0.607
-    NA: 1.4
-    RI:
-      imm: 1.515
-      med: 1.56
-      cov: 1.515
+    numerical_aperture: 1.4
+    refractive_indices:
+      immersion: 1.515
+      medium: 1.56
+      coverslip: 1.515
   selection:
     roi:
       roi_size: [21,21]
@@ -21,4 +21,4 @@ Params:
       z_end: -3
   model:
     psf:
-      n_max: 6
+      max_zernike_order: 6

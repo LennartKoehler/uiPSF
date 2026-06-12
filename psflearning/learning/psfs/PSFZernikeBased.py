@@ -196,7 +196,7 @@ class PSFZernikeBased(PSFZernikeBase):
 
         _, rois, _, _ = data.get_image_data()
 
-        if params.model.psf.with_IMM:
+        if params.model.psf.include_index_mismatch:
             init_positions = np.zeros((rois.shape[0], len(rois.shape)))
         else:
             init_positions = np.zeros((rois.shape[0], len(rois.shape) - 1))
@@ -215,7 +215,7 @@ class PSFZernikeBased(PSFZernikeBase):
         Nz = bead_kernel.shape[0]
         pupil_field = self.compute_pupil_field(data, params, psf_type, Nz=Nz)
 
-        if params.model.psf.const_pupilmag:
+        if params.model.psf.constant_pupil_magnitude:
             max_magnitude_order = 0
         else:
             max_magnitude_order = 100
@@ -232,7 +232,7 @@ class PSFZernikeBased(PSFZernikeBase):
             zernike_phase=0.5 / weight_intensity * 40,
         )
 
-        sigma = np.ones((2,)) * params.model.psf.blur_sigma * np.pi
+        sigma = np.ones((2,)) * params.model.psf.extra_blur_sigma * np.pi
 
         init_zernike_coeff_magnitude = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
         init_zernike_coeff_phase = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
@@ -248,7 +248,7 @@ class PSFZernikeBased(PSFZernikeBase):
         init_intensity_grid = np.ones((n_beads, n_z_slices, 1, 1), dtype=np.float32) * init_intensities
 
 
-        if params.model.psf.var_photon:
+        if params.model.psf.estimate_photon_variation:
             init_intensity = init_intensity_grid / optimization_weights.intensity
         else:
             init_intensity = init_intensities / optimization_weights.intensity
@@ -399,7 +399,7 @@ class PSFZernikeBased(PSFZernikeBase):
         zernike_coeff_magnitude = zernike_coeff_magnitude * context.optimization_weights.zernike_magnitude
         zernike_coeff_phase = zernike_coeff_phase * context.optimization_weights.zernike_phase
 
-        bin_factor = context.params.model.psf.bin
+        bin_factor = context.params.model.psf.pixel_upsampling_factor
         positions[:, 1:] = positions[:, 1:] / bin_factor
 
         if context.initial_pupil is not None:

@@ -35,28 +35,28 @@ class TestSaveParamsRoundTrip:
         save_params(original, out)
 
         reloaded_cfg = load(out)
-        assert reloaded_cfg.Params.data.gain == 0.2
-        assert reloaded_cfg.Params.model.PSFtype == "zernike"
+        assert reloaded_cfg.Params.data.camera_gain == 0.2
+        assert reloaded_cfg.Params.model.psf_type == "zernike"
 
     def test_roundtrip_modified_params(self, tmp_path):
         param = load_params()
-        param.data.gain = 0.5
-        param.data.NA = 1.49
+        param.data.camera_gain = 0.5
+        param.data.numerical_aperture = 1.49
         param.selection.roi.roi_size = [31, 31]
-        param.runtime.usecuda = False
+        param.runtime.use_cuda = False
 
         out = tmp_path / "saved.yaml"
         save_params(param, out)
 
         cfg = load(out)
-        assert cfg.Params.data.gain == 0.5
-        assert cfg.Params.data.NA == 1.49
+        assert cfg.Params.data.camera_gain == 0.5
+        assert cfg.Params.data.numerical_aperture == 1.49
         assert cfg.Params.selection.roi.roi_size == [31, 31]
-        assert cfg.Params.runtime.usecuda is False
+        assert cfg.Params.runtime.use_cuda is False
 
     def test_roundtrip_preserves_nested_structure(self, tmp_path):
         param = load_params()
-        param.data.RI.imm = 1.400
+        param.data.refractive_indices.immersion = 1.400
         param.model.loss_weight.smooth = 5
         param.model.rej_threshold.photon = 2.0
 
@@ -64,7 +64,7 @@ class TestSaveParamsRoundTrip:
         save_params(param, out)
 
         cfg = load(out)
-        assert cfg.Params.data.RI.imm == 1.400
+        assert cfg.Params.data.refractive_indices.immersion == 1.400
         assert cfg.Params.model.loss_weight.smooth == 5
         assert cfg.Params.model.rej_threshold.photon == 2.0
 
@@ -72,7 +72,7 @@ class TestSaveParamsRoundTrip:
         param = load_params()
         param.selection.roi.roi_size = [31, 31, 31]
         param.selection.roi.gauss_sigma = [4, 4, 4]
-        param.data.LLS.skew_const = [1, -1]
+        param.data.lattice_light_sheet.skew_translation_per_slice = [1, -1]
         param.io.filelist = ["a.tif", "b.tif"]
 
         out = tmp_path / "saved.yaml"
@@ -81,34 +81,34 @@ class TestSaveParamsRoundTrip:
         cfg = load(out)
         assert cfg.Params.selection.roi.roi_size == [31, 31, 31]
         assert cfg.Params.selection.roi.gauss_sigma == [4, 4, 4]
-        assert cfg.Params.data.LLS.skew_const == [1, -1]
+        assert cfg.Params.data.lattice_light_sheet.skew_translation_per_slice == [1, -1]
         assert list(cfg.Params.io.filelist) == ["a.tif", "b.tif"]
 
 
 class TestSaveParamsAsUserConfig:
     def test_saved_file_usable_as_userfile(self, tmp_path):
         param = load_params()
-        param.data.gain = 0.77
-        param.data.NA = 1.60
+        param.data.camera_gain = 0.77
+        param.data.numerical_aperture = 1.60
 
         out = tmp_path / "user_override.yaml"
         save_params(param, out)
 
         reloaded = load_params(userfile=str(out.with_suffix("")))
-        assert reloaded.data.gain == 0.77
-        assert reloaded.data.NA == 1.60
+        assert reloaded.data.camera_gain == 0.77
+        assert reloaded.data.numerical_aperture == 1.60
 
     def test_saved_merged_config_reloadable(self, tmp_path):
         param = load_params(psftype="zernike", sysfile="M2")
-        param.data.gain = 0.33
+        param.data.camera_gain = 0.33
 
         out = tmp_path / "merged.yaml"
         save_params(param, out)
 
         reloaded_cfg = load(out)
-        assert reloaded_cfg.Params.data.gain == 0.33
-        assert reloaded_cfg.Params.model.PSFtype == "zernike_vector"
-        assert reloaded_cfg.Params.data.swapxy is True
+        assert reloaded_cfg.Params.data.camera_gain == 0.33
+        assert reloaded_cfg.Params.model.psf_type == "zernike_vector"
+        assert reloaded_cfg.Params.data.swap_xy_dimensions is True
 
 
 class TestToDict:
@@ -127,10 +127,10 @@ class TestToDict:
         d = param.to_dict()
         assert isinstance(d["model"], dict)
         assert isinstance(d["data"], dict)
-        assert d["data"]["NA"] == 1.43
+        assert d["data"]["numerical_aperture"] == 1.43
 
     def test_to_dict_reflects_modifications(self):
         param = load_params()
-        param.data.gain = 0.99
+        param.data.camera_gain = 0.99
         d = param.to_dict()
-        assert d["data"]["gain"] == 0.99
+        assert d["data"]["camera_gain"] == 0.99

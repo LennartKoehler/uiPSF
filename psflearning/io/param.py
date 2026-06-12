@@ -21,24 +21,24 @@ def load(path: Union[str, Path]) -> DictConfig:
 
 @dataclass
 class RefractiveIndices:
-    imm: float = 1.516
-    med: float = 1.335
-    cov: float = 1.516
+    immersion: float = 1.516
+    medium: float = 1.335
+    coverslip: float = 1.516
 
 
 @dataclass
 class PSFModelParams:
-    pupilsize: int = 64
-    n_max: int = 8
-    blur_sigma: float = 0.5
-    with_apoid: bool = True
-    const_pupilmag: bool = False
-    symmetric_mag: bool = False
-    with_IMM: bool = False
-    init_pupil_file: str = ""
+    pupil_size: int = 64
+    max_zernike_order: int = 8
+    extra_blur_sigma: float = 0.5
+    include_apodization: bool = True
+    constant_pupil_magnitude: bool = False
+    radially_symmetric_magnitude: bool = False
+    include_index_mismatch: bool = False
+    initial_pupil_file_path: str = ""
     estimate_drift: bool = False
-    var_photon: bool = False
-    bin: int = 2
+    estimate_photon_variation: bool = False
+    pixel_upsampling_factor: int = 2
 
 
 @dataclass
@@ -74,25 +74,26 @@ class FOVParams:
 
 @dataclass
 class LLSParams:
-    skew_const: list = field(default_factory=lambda: [0, 0])
+    skew_translation_per_slice: list = field(default_factory=lambda: [0, 0])
 
 
 @dataclass
 class LossWeightParams:
-    mse1: int = 1
-    mse2: int = 1
+    mse_weight: int = 1
+    modified_mse_weight: int = 1
     smooth: int = 0
     edge: float = 0.01
-    psf_min: int = 1
-    bg_min: int = 1
-    photon_min: int = 1
-    Inorm: int = 0
-    gxy_min: int = 10
+    psf_positivity_weight: int = 1
+    background_positivity_weight: int = 1
+    photon_positivity_weight: int = 1
+    intensity_normalization_weight: int = 0
+    lateral_drift_weight: int = 10
 
     def values(self):
-        return [self.mse1, self.mse2, self.smooth, self.edge,
-                self.psf_min, self.bg_min, self.photon_min,
-                self.Inorm, self.gxy_min]
+        return [self.mse_weight, self.modified_mse_weight, self.smooth, self.edge,
+                self.psf_positivity_weight, self.background_positivity_weight,
+                self.photon_positivity_weight,
+                self.intensity_normalization_weight, self.lateral_drift_weight]
 
 
 @dataclass
@@ -110,26 +111,26 @@ class RejThresholdParams:
 
 @dataclass
 class IOParams:
-    datapath: str = ""
+    data_path: str = ""
     keyword: str = "Default."
-    savename: str = ""
+    output_path: str = ""
     subfolder: str = ""
     format: str = ".tif"
-    varname: str = ""
+    variable_name: str = ""
     filelist: list = field(default_factory=list)
 
 
 @dataclass
 class DataParams:
-    gain: float = 0.2
-    ccd_offset: float = 398.6
-    stage_mov_dir: str = "normal"
-    swapxy: bool = False
+    camera_gain: float = 0.2
+    camera_offset: float = 398.6
+    stage_movement_direction: str = "normal"
+    swap_xy_dimensions: bool = False
     emission_wavelength: float = 0.68
-    NA: float = 1.43
-    RI: RefractiveIndices = field(default_factory=RefractiveIndices)
+    numerical_aperture: float = 1.43
+    refractive_indices: RefractiveIndices = field(default_factory=RefractiveIndices)
     pixel_size: PixelSizeParams = field(default_factory=PixelSizeParams)
-    LLS: LLSParams = field(default_factory=LLSParams)
+    lattice_light_sheet: LLSParams = field(default_factory=LLSParams)
 
 
 @dataclass
@@ -140,7 +141,7 @@ class SelectionParams:
 
 @dataclass
 class ModelConfig:
-    PSFtype: str = "zernike"
+    psf_type: str = "zernike"
     psf: PSFModelParams = field(default_factory=PSFModelParams)
     loss_weight: LossWeightParams = field(default_factory=LossWeightParams)
     rej_threshold: RejThresholdParams = field(default_factory=RejThresholdParams)
@@ -148,11 +149,11 @@ class ModelConfig:
 
 @dataclass
 class RuntimeParams:
-    usecuda: bool = True
+    use_cuda: bool = True
     batch_size: int = 1600
-    iteration: int = 200
-    relearn: bool = True
-    plotall: bool = False
+    max_iterations: int = 200
+    enable_relearning: bool = True
+    plot_all_steps: bool = False
 
 
 # ── Top-level RunParameters ────────────────────────────────────────────
@@ -222,7 +223,7 @@ def load_params(
         fparam.selection.roi.max_kernel[-1] = max([5, fparam.selection.roi.max_kernel[-1]])
         fparam.selection.roi.max_kernel[-2] = max([5, fparam.selection.roi.max_kernel[-2]])
     if psftype is not None and "FD" in psftype:
-        fparam.model.psf.bin = 1
+        fparam.model.psf.pixel_upsampling_factor = 1
 
     return _dictconfig_to_params(fparam)
 

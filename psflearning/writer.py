@@ -62,7 +62,7 @@ class DefaultWriter(Writer):
         forward_images: Optional[np.ndarray] = None,
     ) -> str:
         print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
-        savename = param.io.savename + "_" + param.model.PSFtype
+        savename = param.io.output_path + "_" + param.model.psf_type
         self.write_psf(learning_result.psf_model_image, savename + ".tif")
 
         return "succcess"
@@ -116,7 +116,7 @@ class H5Writer(Writer):
             postfix=["total time: ", dict(time=toc)],
         )
 
-        savename = param.io.savename + "_" + param.model.PSFtype
+        savename = param.io.output_path + "_" + param.model.psf_type
         result_dict = _build_result_dict(learning_result, pupil_field, dataobj)
 
         img, _, centers, file_idxs = dataobj.get_image_data()

@@ -5,13 +5,13 @@ Params:
     pixel_size:
       x: 0.108
       y: 0.108
-    swapxy: false
+    swap_xy_dimensions: false
     emission_wavelength: 0.67
-    NA: 1.35
-    RI:
-      imm: 1.406
-      med: 1.406
-      cov: 1.524
+    numerical_aperture: 1.35
+    refractive_indices:
+      immersion: 1.406
+      medium: 1.406
+      coverslip: 1.524
   selection:
     roi:
       roi_size: [23,23]
@@ -19,4 +19,4 @@ Params:
       max_kernel: [3,3]
   model:
     psf:
-      n_max: 8
+      max_zernike_order: 8

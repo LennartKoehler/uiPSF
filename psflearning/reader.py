@@ -134,19 +134,19 @@ class Reader:
     ) -> Optional[np.ndarray]:
         """Load initial pupil from an HDF5 result file.
 
-        If ``param.model.psf.init_pupil_file`` is falsy, returns None.
+        If ``param.model.psf.initial_pupil_file_path`` is falsy, returns None.
 
         Parameters
         ----------
         param : DictConfig
-            Experiment parameters (``model.psf.init_pupil_file`` is used).
+            Experiment parameters (``model.psf.initial_pupil_file_path`` is used).
 
         Returns
         -------
         numpy.ndarray or None
             Initial pupil array, or None if no file is configured.
         """
-        pupilfile = param.model.psf.init_pupil_file
+        pupilfile = param.model.psf.initial_pupil_file_path
         if not pupilfile:
             return None
 
@@ -172,7 +172,7 @@ class Reader:
     @staticmethod
     def _swap_xy(images: np.ndarray, param: Union[RunParameters, DictConfig]) -> np.ndarray:
         """Optionally swap the x and y axes."""
-        if not param.data.swapxy:
+        if not param.data.swap_xy_dimensions:
             return images
         tmp = np.zeros(
             images.shape[:-2]
@@ -187,7 +187,7 @@ class Reader:
         images: np.ndarray, param: Union[RunParameters, DictConfig]
     ) -> np.ndarray:
         """Flip the z-axis when the stage moves in reverse for bead data."""
-        if param.data.stage_mov_dir == "reverse":
+        if param.data.stage_movement_direction == "reverse":
             return np.flip(images, axis=-3)
         return images
 
