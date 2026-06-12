@@ -1,0 +1,8 @@
+example_data_for_uiPSF
+.git
+__pycache__
+*.pyc
+.pytest_cache
+test_output
+*.egg-info
+.vscode

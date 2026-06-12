@@ -11,7 +11,7 @@ from tensorflow import math as tfm
 from .IPSFModel import IPSFModel, PupilField
 
 from .. import utilities as im
-from psflearning.io.param import OptionParams
+from psflearning.io.param import RunParameters
 
 @dataclass
 class OptimizationWeights:
@@ -40,7 +40,7 @@ class PSFContext:
     fields, and optimization weights — nothing lives on the PSF instance.
     """
 
-    params: OptionParams
+    params: RunParameters
     pupil_field: PupilField
     bead_kernel: Optional[Any] = None
     optimization_weights: Optional[OptimizationWeights] = None
@@ -144,7 +144,7 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
             pupil_mag = tf.reduce_sum(
                 pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
-        elif context.params.model.symmetric_mag:
+        elif context.params.model.psf.symmetric_mag:
             pupil_mag = tf.reduce_sum(
                 pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
             )
@@ -294,7 +294,7 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         """
         propagated = self.propagate_pupil(pupil, phase_z, context, phase_xy)
         blurred = self.apply_blur_3d(propagated, sigma, context, use_bead_kernel=use_bead_kernel)
-        binned = self.bin_image_3d(blurred, context.params.model.bin)
+        binned = self.bin_image_3d(blurred, context.params.model.psf.bin)
         psf = binned[..., 0]
         if data is not None:
             psf = self.trim_z_padding(psf, data, context)

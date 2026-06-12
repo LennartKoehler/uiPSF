@@ -85,7 +85,7 @@ class PSFLearningLib:
         psf_info = get_psf_info(parameters)
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
-        if parameters.relearn:
+        if parameters.runtime.relearn:
             psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
         else:
             psf_model, learning_result, _, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
@@ -112,9 +112,9 @@ class PSFLearningLib:
         PreprocessedImageData
             Data object with extracted ROIs ready for PSF fitting.
         """
-        roi_size = param.roi.roi_size
-        fov = list(param.FOV.values())
-        skew_const = param.LLS.skew_const
+        roi_size = param.selection.roi.roi_size
+        fov = list(param.selection.FOV.values())
+        skew_const = param.data.LLS.skew_const
 
         zstart = fov[-3]
         zend = images.shape[-3]+fov[-2]
@@ -136,21 +136,21 @@ class PSFLearningLib:
 
         dataobj.process(
             roi_size=roi_size,
-            gaus_sigma=param.roi.gauss_sigma,
+            gaus_sigma=param.selection.roi.gauss_sigma,
             min_border_dist=list(np.array(roi_size) // 2 + 1),
             min_center_dist=np.max(roi_size),
             FOV=fov_param,
-            max_threshold=param.roi.peak_height,
-            max_kernel=param.roi.max_kernel,
-            pixelsize_x=param.pixel_size.x,
-            pixelsize_y=param.pixel_size.y,
-            pixelsize_z=param.pixel_size.z,
-            bead_radius=param.roi.bead_radius,
-            plot=param.plotall,
+            max_threshold=param.selection.roi.peak_height,
+            max_kernel=param.selection.roi.max_kernel,
+            pixelsize_x=param.data.pixel_size.x,
+            pixelsize_y=param.data.pixel_size.y,
+            pixelsize_z=param.data.pixel_size.z,
+            bead_radius=param.selection.roi.bead_radius,
+            plot=param.runtime.plotall,
             padPSF=True,
             isVolume=False,
             skew_const=skew_param,
-            max_bead_number=param.roi.max_bead_number,
+            max_bead_number=param.selection.roi.max_bead_number,
         )
         return dataobj
 

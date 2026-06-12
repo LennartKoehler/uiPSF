@@ -1,80 +1,79 @@
 Params:
-  datapath: E:/EMBL files/data 2022/230202_Nup96SNAP_NC_M2/Nup96SNAP_BME_i50SM_ex200_zpos5um_NC_1                 # full path to your data
-  keyword: Default.                 # keyword for your data file, used for automatic finding files with the same keyword
-  savename: E:/EMBL files/data 2022/230202_Nup96SNAP_NC_M2/Nup96SNAP_BME_i50SM_ex200_zpos5um_NC_1/psfmodel_iter            # full path to your result foder/filename
-  subfolder: ""                 # keyword for subfolder name if each bead data is saved in a individual folder
-  format: .tif                  # .mat, .tif, .czi
-  stage_mov_dir: normal         # normal, reverse: normal direction is where stage move towards the objective when taking a z-stack bead data
-  gain: 0.2
-  ccd_offset: 398.6
-  roi:
-    roi_size: [21,21]           # vector of 2 or 3 element, roi size in [y, x] or [z, y, x]
-    gauss_sigma: [2,2]          # blur kernel size, corresponding to dimensions defined in roi_size
-    max_kernel: [3,3]           # maximum filter kernel size, corresponding to dimensions defined in roi_size
-    peak_height: 0.2            # relative to maximum bead intensity, bead intensity below which are rejected
-    max_bead_number: 40
-    bead_radius: 0.0            # unit: micron
-  pixel_size:                   # unit: micron
-    x: 0.127
-    y: 0.116
-    z: 0.05
-  FOV:                           # define FOV for bead selection, if x_center, y_center, radius are 0, select the full FOV
-    y_center: 0
-    x_center: 0
-    radius: 0
-    z_start: 0
-    z_end: -0
-    z_step: 1
+  io:
+    datapath: ""
+    keyword: "Default."
+    savename: ""
+    subfolder: ""
+    format: .tif
+    varname: ""
+    filelist: []
 
-  LLS:                           # parameters only for lattice light-sheet psfs
-    skew_const: [0,0]            # unit: pixel
+  data:
+    gain: 0.2
+    ccd_offset: 398.6
+    stage_mov_dir: normal
+    swapxy: false
+    emission_wavelength: 0.68
+    NA: 1.43
+    RI:
+      imm: 1.516
+      med: 1.335
+      cov: 1.516
+    pixel_size:
+      x: 0.127
+      y: 0.116
+      z: 0.05
+    LLS:
+      skew_const: [0,0]
 
-  option:
-    imaging:
-      emission_wavelength: 0.68    # unit: micron
-      RI:
-        imm: 1.516
-        med: 1.335
-        cov: 1.516
-      NA: 1.43
-    model:
-      pupilsize: 64                # unit: pixel
-      n_max: 8                     # maximum zernike order
-      zernike_nl: []               # set the Zernike terms for PSF learning, e.g. [(2,2),(2,-2)], if empty, all zernike terms defined by n_max will be used
-      blur_sigma: 0.5              # unit: pixel
-      var_blur: true               # estimate blurring sigma
-      with_apoid: true              # with theoretical apoidization term
-      const_pupilmag: false         # pupil magnitude is constant and equal to one
-      symmetric_mag: false          # pupil magnitude is circular symmetric
-      with_IMM: false               # only used for agarose bead
-      init_pupil_file: ""           # .h file from psf learning
-      estimate_drift: false         # estimate lateral drift between each z slice
-      var_photon: false             # estimate photon variation between each z slice
-      bin: 2                        # upsamplling pixel size equal to camera pixel size divided by bin
-      division: 40                  # number of divisions per lateral dimension for learning field-dependent aberration
+  selection:
+    roi:
+      roi_size: [21,21]
+      gauss_sigma: [2,2]
+      max_kernel: [3,3]
+      peak_height: 0.2
+      max_bead_number: 40
+      bead_radius: 0.0
+    FOV:
+      y_center: 0
+      x_center: 0
+      radius: 0
+      z_start: 0
+      z_end: -0
+      z_step: 1
 
-  PSFtype: zernike
+  model:
+    PSFtype: zernike
+    psf:
+      pupilsize: 64
+      n_max: 8
+      blur_sigma: 0.5
+      with_apoid: true
+      const_pupilmag: false
+      symmetric_mag: false
+      with_IMM: false
+      init_pupil_file: ""
+      estimate_drift: false
+      var_photon: false
+      bin: 2
+    loss_weight:
+      mse1: 1
+      mse2: 1
+      smooth: 0
+      edge: 0.01
+      psf_min: 1
+      bg_min: 1
+      photon_min: 1
+      Inorm: 0
+      gxy_min: 10
+    rej_threshold:
+      bias_z: 0.99
+      mse: 0.8
+      photon: 1.5
 
-  loss_weight:                   # weighting factor for each loss term
-    mse1: 1
-    mse2: 1
-    smooth: 0
-    edge: 0.01
-    psf_min: 1
-    bg_min: 1
-    photon_min: 1
-    Inorm: 0
-    gxy_min: 10
-
-  rej_threshold:                 # threshold for outlier removal after initial learning
-    bias_z: 0.99
-    mse: 0.8
-    photon: 1.5
-
-  usecuda: true                  # for spline localization
-  plotall: false
-  batch_size: 1600               # maximum number of beads or emitters to be optimized at one time
-  iteration: 200                 # number of iterations for learning
-  varname: ""                    # only for simulated data from matlab, the variable name for the data
-  filelist: []                   # user can also give a list of data files, instead of giving the keyword or subfolder, data loading will skip automatic populate filelist
-  swapxy: false                  # permute x,y dimension
+  runtime:
+    usecuda: true
+    batch_size: 1600
+    iteration: 200
+    relearn: true
+    plotall: false

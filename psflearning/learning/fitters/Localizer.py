@@ -26,7 +26,7 @@ def localize(
     rois : np.ndarray
         Measured ROI images.
     param : RunParameters or DictConfig
-        Experiment parameters (uses ``param.usecuda``).
+        Experiment parameters (uses ``param.runtime.usecuda``).
     toc : float, optional
         Start time for progress reporting.
 
@@ -34,5 +34,5 @@ def localize(
     -------
     LocalizationResult
     """
-    dll = localizationlib(usecuda=param.usecuda)
+    dll = localizationlib(usecuda=param.runtime.usecuda)
     return dll.loc_ast(rois, psf_model_image, pixelsize_z, initz=None, start_time=toc)

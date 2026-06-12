@@ -27,19 +27,10 @@ class RefractiveIndices:
 
 
 @dataclass
-class ImagingParams:
-    emission_wavelength: float = 0.68
-    NA: float = 1.43
-    RI: RefractiveIndices = field(default_factory=RefractiveIndices)
-
-
-@dataclass
-class ModelParams:
+class PSFModelParams:
     pupilsize: int = 64
     n_max: int = 8
-    zernike_nl: list = field(default_factory=list)
     blur_sigma: float = 0.5
-    var_blur: bool = True
     with_apoid: bool = True
     const_pupilmag: bool = False
     symmetric_mag: bool = False
@@ -48,14 +39,6 @@ class ModelParams:
     estimate_drift: bool = False
     var_photon: bool = False
     bin: int = 2
-    division: int = 40
-    search_radius: float = 0.0
-
-
-@dataclass
-class OptionParams:
-    imaging: ImagingParams = field(default_factory=ImagingParams)
-    model: ModelParams = field(default_factory=ModelParams)
 
 
 @dataclass
@@ -122,35 +105,66 @@ class RejThresholdParams:
         return [self.bias_z, self.mse, self.photon]
 
 
-# ── Top-level RunParameters ────────────────────────────────────────────
+# ── Group dataclasses ──────────────────────────────────────────────────
 
 
 @dataclass
-class RunParameters:
+class IOParams:
     datapath: str = ""
     keyword: str = "Default."
     savename: str = ""
     subfolder: str = ""
     format: str = ".tif"
-    stage_mov_dir: str = "normal"
-    gain: float = 0.2
-    ccd_offset: float = 398.6
-    roi: RoiParams = field(default_factory=RoiParams)
-    pixel_size: PixelSizeParams = field(default_factory=PixelSizeParams)
-    FOV: FOVParams = field(default_factory=FOVParams)
-    LLS: LLSParams = field(default_factory=LLSParams)
-    option: OptionParams = field(default_factory=OptionParams)
-    PSFtype: str = "zernike"
-    loss_weight: LossWeightParams = field(default_factory=LossWeightParams)
-    rej_threshold: RejThresholdParams = field(default_factory=RejThresholdParams)
-    usecuda: bool = True
-    relearn: bool = True
-    plotall: bool = False
-    batch_size: int = 1600
-    iteration: int = 200
     varname: str = ""
     filelist: list = field(default_factory=list)
+
+
+@dataclass
+class DataParams:
+    gain: float = 0.2
+    ccd_offset: float = 398.6
+    stage_mov_dir: str = "normal"
     swapxy: bool = False
+    emission_wavelength: float = 0.68
+    NA: float = 1.43
+    RI: RefractiveIndices = field(default_factory=RefractiveIndices)
+    pixel_size: PixelSizeParams = field(default_factory=PixelSizeParams)
+    LLS: LLSParams = field(default_factory=LLSParams)
+
+
+@dataclass
+class SelectionParams:
+    roi: RoiParams = field(default_factory=RoiParams)
+    FOV: FOVParams = field(default_factory=FOVParams)
+
+
+@dataclass
+class ModelConfig:
+    PSFtype: str = "zernike"
+    psf: PSFModelParams = field(default_factory=PSFModelParams)
+    loss_weight: LossWeightParams = field(default_factory=LossWeightParams)
+    rej_threshold: RejThresholdParams = field(default_factory=RejThresholdParams)
+
+
+@dataclass
+class RuntimeParams:
+    usecuda: bool = True
+    batch_size: int = 1600
+    iteration: int = 200
+    relearn: bool = True
+    plotall: bool = False
+
+
+# ── Top-level RunParameters ────────────────────────────────────────────
+
+
+@dataclass
+class RunParameters:
+    io: IOParams = field(default_factory=IOParams)
+    data: DataParams = field(default_factory=DataParams)
+    selection: SelectionParams = field(default_factory=SelectionParams)
+    model: ModelConfig = field(default_factory=ModelConfig)
+    runtime: RuntimeParams = field(default_factory=RuntimeParams)
 
     def to_dict(self) -> dict:
         return OmegaConf.to_container(OmegaConf.create(asdict(self)))
@@ -158,32 +172,81 @@ class RunParameters:
 
 # ── Construction from YAML ─────────────────────────────────────────────
 
+_PKG_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def combine(
-    basefile: str,
+
+def load_params(
+    userfile: Optional[str] = None,
     psftype: Optional[str] = None,
     sysfile: Optional[str] = None,
 ) -> RunParameters:
-    """Load a base config and layer in psftype and
-    systemtype overrides, returning a typed :class:`RunParameters`."""
-    thispath = os.path.dirname(os.path.abspath(__file__))
-    pkgpath = os.path.dirname(os.path.dirname(thispath))
-    fparam = load(pkgpath + "/config/" + basefile + ".yaml").Params
+    """Load parameters by layering configs on top of the base config.
+
+    Merge order (each layer overwrites leaf values from the previous):
+
+    1. **config_base.yaml** — always loaded first (complete defaults).
+    2. *userfile* — sparse YAML with arbitrary overrides (only the fields
+       that differ from the base need to be present).
+    3. *psftype* — PSF-model-specific overrides.
+    4. *sysfile* — microscope-system-specific overrides.
+
+    Parameters
+    ----------
+    userfile : str, optional
+        Name of a YAML file inside ``config/`` (without extension) whose
+        ``Params`` key is merged on top of the base config.
+    psftype : str, optional
+        PSF type name (e.g. ``"zernike"``), resolved inside
+        ``config/psftype/``.
+    sysfile : str, optional
+        System type name (e.g. ``"M2"``), resolved inside
+        ``config/systemtype/``.
+
+    Returns
+    -------
+    RunParameters
+    """
+    fparam = load(os.path.join(_PKG_DIR, "config", "config_base.yaml")).Params
+    if userfile is not None:
+        userparam = load(os.path.join(_PKG_DIR, "config", userfile + ".yaml")).Params
+        fparam = _redefine(fparam, userparam)
     if psftype is not None:
-        psfparam = load(pkgpath + "/config/psftype/" + psftype + ".yaml").Params
+        psfparam = load(os.path.join(_PKG_DIR, "config", "psftype", psftype + ".yaml")).Params
         fparam = _redefine(fparam, psfparam)
     if sysfile is not None:
-        sysparam = load(pkgpath + "/config/systemtype/" + sysfile + ".yaml").Params
+        sysparam = load(os.path.join(_PKG_DIR, "config", "systemtype", sysfile + ".yaml")).Params
         fparam = _redefine(fparam, sysparam)
     if psftype is not None and "insitu" in psftype:
-        fparam.roi.gauss_sigma[-1] = max([4, fparam.roi.gauss_sigma[-1]])
-        fparam.roi.gauss_sigma[-2] = max([4, fparam.roi.gauss_sigma[-2]])
-        fparam.roi.max_kernel[-1] = max([5, fparam.roi.max_kernel[-1]])
-        fparam.roi.max_kernel[-2] = max([5, fparam.roi.max_kernel[-2]])
+        fparam.selection.roi.gauss_sigma[-1] = max([4, fparam.selection.roi.gauss_sigma[-1]])
+        fparam.selection.roi.gauss_sigma[-2] = max([4, fparam.selection.roi.gauss_sigma[-2]])
+        fparam.selection.roi.max_kernel[-1] = max([5, fparam.selection.roi.max_kernel[-1]])
+        fparam.selection.roi.max_kernel[-2] = max([5, fparam.selection.roi.max_kernel[-2]])
     if psftype is not None and "FD" in psftype:
-        fparam.option.model.bin = 1
+        fparam.model.psf.bin = 1
 
     return _dictconfig_to_params(fparam)
+
+
+def save_params(
+    param: RunParameters,
+    path: Union[str, Path],
+) -> None:
+    """Write a :class:`RunParameters` instance to a YAML file.
+
+    The file is written with a top-level ``Params:`` key so it can be
+    re-loaded as a user config via :func:`load_params`.
+
+    Parameters
+    ----------
+    param : RunParameters
+    path : str or Path
+        Destination file path (typically ending in ``.yaml``).
+    """
+    parent: Path = Path(path).parent
+    parent.mkdir(parents=True, exist_ok=True)
+    cfg = OmegaConf.create({"Params": param.to_dict()})
+    OmegaConf.save(cfg, path)
+
 
 
 def _dictconfig_to_params(cfg: DictConfig) -> RunParameters:

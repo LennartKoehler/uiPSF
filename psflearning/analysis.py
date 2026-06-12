@@ -62,9 +62,9 @@ def genpsf(
 
     p = param
     dataobj = DottedDict(
-        pixelsize_x=p.pixel_size.x,
-        pixelsize_y=p.pixel_size.y,
-        pixelsize_z=p.pixel_size.z,
+        pixelsize_x=p.data.pixel_size.x,
+        pixelsize_y=p.data.pixel_size.y,
+        pixelsize_z=p.data.pixel_size.z,
         image_size=list(f.rois.full_image_size),
         rois=np.zeros((Nz, xsz, xsz)),
     )
@@ -85,8 +85,8 @@ def _genpsf_single(psf_model, dataobj, f, p, Nz, stagepos):
         f.res.zernike_coefficients[1].shape + (1, 1)
     )
 
-    pupil_field = IPSFModel.compute_pupil_field(dataobj, p.option, "scalar", Nz=Nz)
-    context = PSFContext(params=p.option, pupil_field=pupil_field)
+    pupil_field = IPSFModel.compute_pupil_field(dataobj, p, "scalar", Nz=Nz)
+    context = PSFContext(params=p, pupil_field=pupil_field)
     f.res.psf_model_image, _ = psf_model.genpsfmodel(sigma, context, Zcoeff_magnitude=Zcoeff_magnitude, Zcoeff_phase=Zcoeff_phase)
 
 
@@ -166,9 +166,9 @@ def calfwhm(
 def _fwhm_single(p, f, f1, psf_info):
     psf_model_image = f.res.psf_model_image
     Ix, xh, Iy, yh, Iz, zh = getfwhm(psf_model_image)
-    fwhmx = np.diff(xh) * p.pixel_size.x * 1e3
-    fwhmy = np.diff(yh) * p.pixel_size.y * 1e3
-    fwhmz = np.diff(zh) * p.pixel_size.z * 1e3
+    fwhmx = np.diff(xh) * p.data.pixel_size.x * 1e3
+    fwhmy = np.diff(yh) * p.data.pixel_size.y * 1e3
+    fwhmz = np.diff(zh) * p.data.pixel_size.z * 1e3
 
     return fwhmx, fwhmy, fwhmz
 

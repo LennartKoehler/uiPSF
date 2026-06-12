@@ -10,6 +10,7 @@ from typing import Any, Optional, Union
 import h5py as h5
 import json
 import numpy as np
+import tifffile
 from tqdm import tqdm
 from abc import ABC, abstractmethod
 
@@ -49,7 +50,7 @@ class Writer(ABC):
         pass
 
 
-class STDOUTWriter(Writer):
+class DefaultWriter(Writer):
 
     def save_result(
         self,
@@ -61,8 +62,13 @@ class STDOUTWriter(Writer):
         forward_images: Optional[np.ndarray] = None,
     ) -> str:
         print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
+        savename = param.io.savename + "_" + param.model.PSFtype
+        self.write_psf(learning_result.psf_model_image, savename + ".tif")
 
         return "succcess"
+
+    def write_psf(self, psf: np.ndarray, filepath: str) -> None:
+        tifffile.imwrite(filepath, psf.astype(np.float32))
 
 
 class H5Writer(Writer):
@@ -110,7 +116,7 @@ class H5Writer(Writer):
             postfix=["total time: ", dict(time=toc)],
         )
 
-        savename = param.savename + "_" + param.PSFtype
+        savename = param.io.savename + "_" + param.model.PSFtype
         result_dict = _build_result_dict(learning_result, pupil_field, dataobj)
 
         img, _, centers, file_idxs = dataobj.get_image_data()

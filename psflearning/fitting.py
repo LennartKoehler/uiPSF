@@ -56,8 +56,8 @@ def create_learner(
     penalty parameters). Data and PSF model are passed to method calls.
     """
     lossfun = psf_info.loss_fun
-    w = list(param.loss_weight.values())
-    optimizer = L_BFGS_B(maxiter=param.iteration, batch_size=param.batch_size)
+    w = list(param.model.loss_weight.values())
+    optimizer = L_BFGS_B(maxiter=param.runtime.iteration, batch_size=param.runtime.batch_size)
     return PSFLearner(optimizer, lossfun, loss_weight=w)
 
 
@@ -90,7 +90,7 @@ def learn_psf(
 
     learner = create_learner(param, psf_info)
 
-    variables, context, time = psf_model.calc_initials(dataobj, param.option, initial_pupil=initial_pupil, start_time=time)
+    variables, context, time = psf_model.calc_initials(dataobj, param, initial_pupil=initial_pupil, start_time=time)
     fit_result, forward_images, toc = learner.learn_psf(dataobj, psf_model, variables, context, start_time=time)
 
     return psf_model, fit_result, learner, variables, forward_images, toc, context
@@ -131,7 +131,7 @@ def relearn(
     toc : float, optional
         Current end time.
     threshold : list, optional
-        Custom rejection thresholds. If None, uses param.rej_threshold.
+        Custom rejection thresholds. If None, uses param.model.rej_threshold.
 
     Returns
     -------
@@ -139,7 +139,7 @@ def relearn(
         ``(fit_result, locres, forward_images, toc)``
     """
     if threshold is None:
-        threshold = list(param.rej_threshold.values())
+        threshold = list(param.model.rej_threshold.values())
 
     locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
 

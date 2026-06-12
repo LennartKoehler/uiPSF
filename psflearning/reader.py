@@ -14,7 +14,7 @@ import hdfdict
 import numpy as np
 from dotted_dict import DottedDict
 from omegaconf import DictConfig, OmegaConf
-
+import logging
 from .io.param import RunParameters
 from .dataloader import get_loader
 
@@ -42,7 +42,7 @@ class Reader:
         numpy.ndarray
             Image array with axes arranged for the requested configuration.
         """
-        filelist = param.filelist
+        filelist = param.io.filelist
 
         loader = get_loader(param)
         if not filelist:
@@ -50,7 +50,11 @@ class Reader:
         if frange:
             filelist = filelist[frange[0] : frange[1]]
 
-        images_all = loader.load(filelist)
+        try:
+            images_all = loader.load(filelist)
+        except:
+            logging.error("Error in loading images from the following filelist %s", filelist)
+            raise
         images = self._rearrange_axes(images_all, param)
         images = self._reshape_insitu(images, param)
         images = self._swap_xy(images, param)
@@ -69,18 +73,18 @@ class Reader:
         return cfg
 
     @staticmethod
-    def combine_params(
-        basefile: str,
+    def load_params(
+        userfile: Optional[str] = None,
         psftype: Optional[str] = None,
         sysfile: Optional[str] = None,
     ) -> RunParameters:
-        """Combine a base configuration with PSF / channel / system overrides.
+        """Load parameters by layering configs on top of the base config.
 
         Parameters
         ----------
-        basefile : str
-            Base configuration name (without ``.yaml``), resolved relative
-            to the package ``config/`` directory.
+        userfile : str, optional
+            User config name (without ``.yaml``), resolved inside
+            ``config/``.
         psftype : str, optional
             PSF type override (e.g. ``"zernike"``).
         sysfile : str, optional
@@ -91,8 +95,8 @@ class Reader:
         RunParameters
             Merged parameters.
         """
-        from .io.param import combine as _combine
-        return _combine(basefile, psftype=psftype, sysfile=sysfile)
+        from .io.param import load_params as _load_params
+        return _load_params(userfile=userfile, psftype=psftype, sysfile=sysfile)
 
     # ── Result loading ───────────────────────────────────────────────────
 
@@ -130,19 +134,19 @@ class Reader:
     ) -> Optional[np.ndarray]:
         """Load initial pupil from an HDF5 result file.
 
-        If ``param.option.model.init_pupil_file`` is falsy, returns None.
+        If ``param.model.psf.init_pupil_file`` is falsy, returns None.
 
         Parameters
         ----------
         param : DictConfig
-            Experiment parameters (``option.model.init_pupil_file`` is used).
+            Experiment parameters (``model.psf.init_pupil_file`` is used).
 
         Returns
         -------
         numpy.ndarray or None
             Initial pupil array, or None if no file is configured.
         """
-        pupilfile = param.option.model.init_pupil_file
+        pupilfile = param.model.psf.init_pupil_file
         if not pupilfile:
             return None
 
@@ -168,7 +172,7 @@ class Reader:
     @staticmethod
     def _swap_xy(images: np.ndarray, param: Union[RunParameters, DictConfig]) -> np.ndarray:
         """Optionally swap the x and y axes."""
-        if not param.swapxy:
+        if not param.data.swapxy:
             return images
         tmp = np.zeros(
             images.shape[:-2]
@@ -183,7 +187,7 @@ class Reader:
         images: np.ndarray, param: Union[RunParameters, DictConfig]
     ) -> np.ndarray:
         """Flip the z-axis when the stage moves in reverse for bead data."""
-        if param.stage_mov_dir == "reverse":
+        if param.data.stage_mov_dir == "reverse":
             return np.flip(images, axis=-3)
         return images
 

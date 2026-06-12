@@ -14,6 +14,7 @@ import glob
 import logging
 import warnings
 from typing import Any, List
+import logging
 
 
 class DataLoader(ABC):
@@ -29,19 +30,23 @@ class DataLoader(ABC):
     def get_file_list(self) -> List[str]:
         """Return a list of file paths matching the parameter configuration.
 
-        Uses ``param.datapath``, ``param.keyword``, ``param.format``, and
-        optionally ``param.subfolder`` to build a glob pattern and collect
+        Uses ``param.io.datapath``, ``param.io.keyword``, ``param.io.format``, and
+        optionally ``param.io.subfolder`` to build a glob pattern and collect
         matching files.
         """
         param = self.param
-        if not param.subfolder:
-            filelist = glob.glob(param.datapath+'/*'+param.keyword+'*'+param.format)
+        if not param.io.subfolder:
+            filelist = glob.glob(param.io.datapath+'/*'+param.io.keyword+'*'+param.io.format)
         else:
             filelist = []
-            folderlist = glob.glob(param.datapath+'/*'+param.subfolder+'*/')
+            folderlist = glob.glob(param.io.datapath+'/*'+param.io.subfolder+'*/')
             for f in folderlist:
-                filelist.append(glob.glob(f+'/*'+param.keyword+'*'+param.format)[0])
+                filelist.append(glob.glob(f+'/*'+param.io.keyword+'*'+param.io.format)[0])
 
+        if not filelist:
+            raise FileNotFoundError(
+                f"No files matching {param.io.datapath}/*{param.io.keyword}*{param.io.format}"
+            )
         return sorted(filelist)
 
 
@@ -70,7 +75,7 @@ class TiffDataLoader(DataLoader):
         for filename in filelist:
             logging.info("Loading: %s", filename)
             dat = np.squeeze(io.imread(filename).astype(np.float32))
-            dat = (dat-param.ccd_offset)*param.gain
+            dat = (dat-param.data.ccd_offset)*param.data.gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 
@@ -84,7 +89,7 @@ class MatDataLoader(DataLoader):
         """Load MATLAB .mat data from *filelist* and return a stacked numpy array.
 
         Dataset keys ``'metadata'`` and ``'#refs#'`` are automatically
-        excluded.  If ``param.varname`` is set it is used as the dataset
+        excluded.  If ``param.io.varname`` is set it is used as the dataset
         name; otherwise all remaining keys are loaded.
         """
         param = self.param
@@ -92,8 +97,8 @@ class MatDataLoader(DataLoader):
         for filename in filelist:
             logging.info("Loading: %s", filename)
             fdata = h5.File(filename,'r')
-            if param.varname:
-                name = [param.varname]
+            if param.io.varname:
+                name = [param.io.varname]
             else:
                 name = list(fdata.keys())
             try:
@@ -106,7 +111,7 @@ class MatDataLoader(DataLoader):
                 pass
 
             dat = np.squeeze(np.array(fdata.get(name[0])).astype(np.float32))
-            dat = (dat-param.ccd_offset)*param.gain
+            dat = (dat-param.data.ccd_offset)*param.data.gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 
@@ -122,7 +127,7 @@ class CziDataLoader(DataLoader):
         imageraw = []
         for filename in filelist:
             dat = np.squeeze(czi.imread(filename).astype(np.float32))
-            dat = (dat-param.ccd_offset)*param.gain
+            dat = (dat-param.data.ccd_offset)*param.data.gain
             imageraw.append(dat)
         imagesall = np.stack(imageraw)
 
@@ -139,12 +144,12 @@ _FORMAT_MAP = {
 
 def get_loader(param: Any) -> DataLoader:
     """Factory function that returns the appropriate ``DataLoader`` subclass
-    based on ``param.format``.
+    based on ``param.io.format``.
 
     Parameters
     ----------
     param : object
-        Configuration object with at least a ``format`` attribute.
+        Configuration object with at least a ``io.format`` attribute.
 
     Returns
     -------
@@ -154,9 +159,9 @@ def get_loader(param: Any) -> DataLoader:
     Raises
     ------
     TypeError
-        If *param.format* is not a supported format.
+        If *param.io.format* is not a supported format.
     """
-    fmt = param.format
+    fmt = param.io.format
     cls = _FORMAT_MAP.get(fmt)
     if cls is None:
         supported = ', '.join(_FORMAT_MAP.keys())

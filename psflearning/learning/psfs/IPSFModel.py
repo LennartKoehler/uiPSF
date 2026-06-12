@@ -9,7 +9,7 @@ import scipy.special as spf
 from typing import Any, List, Optional
 
 from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
-from psflearning.io.param import OptionParams
+from psflearning.io.param import RunParameters
 from .. import utilities as im
 from enum import Enum
 
@@ -144,7 +144,7 @@ class IPSFModel(ABC):
     @staticmethod
     def compute_pupil_field(
         data: PreprocessedImageDataInterface,
-        params: OptionParams,
+        params: RunParameters,
         psf_type: str = 'vector',
         Nz: int = 21,
     ) -> PupilField:
@@ -163,11 +163,11 @@ class IPSFModel(ABC):
         Returns:
             PupilField with all precomputed optical quantities.
         """
-        bin = params.model.bin
+        bin = params.model.psf.bin
         Lx = data.measured_roi_images.shape[-1]*bin
         Ly = data.measured_roi_images.shape[-2]*bin
         Lz = data.measured_roi_images.shape[-3]
-        xsz = params.model.pupilsize
+        xsz = params.model.psf.pupilsize
 
         xrange = np.linspace(-Lx/2+0.5, Lx/2-0.5, Lx)
         [xx,yy] = np.meshgrid(xrange,xrange)
@@ -178,12 +178,12 @@ class IPSFModel(ABC):
 
         pixelsize_x = data.pixelsize_x/bin
         pixelsize_y = data.pixelsize_y/bin
-        NA = params.imaging.NA
-        emission_wavelength = params.imaging.emission_wavelength
-        nimm = params.imaging.RI.imm
-        nmed = params.imaging.RI.med
-        ncov = params.imaging.RI.cov
-        n_max = params.model.n_max
+        NA = params.data.NA
+        emission_wavelength = params.data.emission_wavelength
+        nimm = params.data.RI.imm
+        nmed = params.data.RI.med
+        ncov = params.data.RI.cov
+        n_max = params.model.psf.n_max
         Zk = im.genZern1(n_max,xsz)
 
         n1 = np.array(range(-1,n_max,2))
@@ -219,7 +219,7 @@ class IPSFModel(ABC):
         hy = sin_phi*pvec+cos_phi*svec
         h = np.concatenate((hx,hy),axis=0)
         dipole_field = np.complex64(h)
-        if params.model.with_apoid:
+        if params.model.psf.with_apoid:
             apoid = np.lib.scimath.sqrt(cos_imm)/cos_med
             if psf_type=='scalar':
                 apoid=apoid*Tavg
@@ -282,7 +282,7 @@ class IPSFModel(ABC):
 
 
     @staticmethod
-    def gen_bead_kernel(data: PreprocessedImageDataInterface, params: OptionParams, isVolume: bool = False) -> tf.Tensor:
+    def gen_bead_kernel(data: PreprocessedImageDataInterface, params: RunParameters, isVolume: bool = False) -> tf.Tensor:
         """Generate a bead kernel for convolution with the PSF model.
 
         Pure function — no side effects.
@@ -294,7 +294,7 @@ class IPSFModel(ABC):
             bin = 1
         else:
             Nz = data.measured_roi_images.shape[-3]+np.int32(bead_radius//pixelsize_z)*2+4
-            bin = params.model.bin
+        bin = params.model.psf.bin
 
         Lx = data.measured_roi_images.shape[-1]*bin
         pixelsize_x = data.pixelsize_x/bin
@@ -351,7 +351,7 @@ class IPSFModel(ABC):
         return psf_shift
 
     @abstractmethod
-    def calc_initials(self, data: PreprocessedImageDataInterface, params: OptionParams, **kwargs) -> tuple:
+    def calc_initials(self, data: PreprocessedImageDataInterface, params: RunParameters, **kwargs) -> tuple:
         """
         Calculates the initial values for the optimizable variables.
 

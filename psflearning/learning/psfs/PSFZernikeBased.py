@@ -186,7 +186,7 @@ class PSFZernikeBased(PSFZernikeBase):
 
         Args:
             data: Preprocessed image data.
-            params: Imaging and model parameters (OptionParams).
+            params: Imaging and model parameters (RunParameters).
             initial_pupil: Optional initial pupil from a previous fit.
             start_time: Start-time stamp for progress reporting.
 
@@ -196,7 +196,7 @@ class PSFZernikeBased(PSFZernikeBase):
 
         _, rois, _, _ = data.get_image_data()
 
-        if params.model.with_IMM:
+        if params.model.psf.with_IMM:
             init_positions = np.zeros((rois.shape[0], len(rois.shape)))
         else:
             init_positions = np.zeros((rois.shape[0], len(rois.shape) - 1))
@@ -215,7 +215,7 @@ class PSFZernikeBased(PSFZernikeBase):
         Nz = bead_kernel.shape[0]
         pupil_field = self.compute_pupil_field(data, params, psf_type, Nz=Nz)
 
-        if params.model.const_pupilmag:
+        if params.model.psf.const_pupilmag:
             max_magnitude_order = 0
         else:
             max_magnitude_order = 100
@@ -232,7 +232,7 @@ class PSFZernikeBased(PSFZernikeBase):
             zernike_phase=0.5 / weight_intensity * 40,
         )
 
-        sigma = np.ones((2,)) * params.model.blur_sigma * np.pi
+        sigma = np.ones((2,)) * params.model.psf.blur_sigma * np.pi
 
         init_zernike_coeff_magnitude = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
         init_zernike_coeff_phase = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
@@ -248,7 +248,7 @@ class PSFZernikeBased(PSFZernikeBase):
         init_intensity_grid = np.ones((n_beads, n_z_slices, 1, 1), dtype=np.float32) * init_intensities
 
 
-        if params.model.var_photon:
+        if params.model.psf.var_photon:
             init_intensity = init_intensity_grid / optimization_weights.intensity
         else:
             init_intensity = init_intensities / optimization_weights.intensity
@@ -332,7 +332,7 @@ class PSFZernikeBased(PSFZernikeBase):
             use_bead_kernel=True, data=data,
         )
 
-        if context.params.model.estimate_drift:
+        if context.params.model.psf.estimate_drift:
             drift_xy = drift_xy * context.optimization_weights.drift
             forward_images = self.applyDrift(propagated_psf_intensity, drift_xy, data, pf) * intensities * context.optimization_weights.intensity + backgrounds * context.optimization_weights.background
         else:
@@ -399,7 +399,7 @@ class PSFZernikeBased(PSFZernikeBase):
         zernike_coeff_magnitude = zernike_coeff_magnitude * context.optimization_weights.zernike_magnitude
         zernike_coeff_phase = zernike_coeff_phase * context.optimization_weights.zernike_phase
 
-        bin_factor = context.params.model.bin
+        bin_factor = context.params.model.psf.bin
         positions[:, 1:] = positions[:, 1:] / bin_factor
 
         if context.initial_pupil is not None:
