@@ -77,4 +77,5 @@ Params:
     batch_size: 1600
     max_iterations: 200
     enable_relearning: true
+    enable_localization: false
     plot_all_steps: false

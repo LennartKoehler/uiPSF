@@ -14,7 +14,7 @@ import h5py as h5
 import logging
 from .utilities import psf2cspline_np
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from ..progress import ProgressReporter
 import os
 import sys
 from psflearning import io
@@ -63,7 +63,6 @@ class LocalizationResult:
     log_likelihood: np.ndarray
     spline_coefficients: np.ndarray
     mse_z_ratio: np.ndarray
-    toc: float
     positions: Positions
 
     def to_dict(self) -> dict[str, Any]:
@@ -127,7 +126,7 @@ class localizationlib:
         ]
 
 
-    def loc_ast(self, rois: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, start_time: float = 0) -> LocalizationResult:
+    def loc_ast(self, rois: np.ndarray, I_model: np.ndarray, pixelsize_z: float, initz: np.ndarray | None = None, reporter: ProgressReporter | None = None) -> LocalizationResult:
         """Perform single-channel astigmatic localization fitting."""
         rsz = rois.shape[-1]
         Nbead = rois.shape[0]
@@ -141,14 +140,11 @@ class localizationlib:
         Imd = I_model-offset
         normf = np.median(np.sum(Imd,axis = (-1,-2)))
         Imd = Imd/normf
-        pbar = tqdm(total=1,desc='4/6: calculating spline coefficients',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=start_time)])
 
+        reporter.begin_stage('4/6: calculating spline coefficients', total=1)
         coeff = psf2cspline_np(Imd)
-
-        pbar.postfix[1]['time'] = start_time+pbar._time()-pbar.start_t
-        pbar.update(1)
-        toc = pbar.postfix[1]['time']
-        pbar.close()
+        reporter.update(1)
+        reporter.close()
 
         coeff = coeff.astype(np.float32)
         data = rois.reshape((Nfit,rsz,rsz))
@@ -178,7 +174,7 @@ class localizationlib:
         CRLB = np.zeros((Nparam,Nfit)).astype(np.float32)
         LL = np.zeros((Nfit)).astype(np.float32)-1e10
 
-        pbar = tqdm(total=len(zstart),desc='5/6: localization',bar_format = "{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt} {postfix[0]}{postfix[1][time]:>4.2f}s",postfix=["total time: ", dict(time=toc)])
+        reporter.begin_stage('5/6: localization', total=len(zstart))
 
         for z0 in zstart:
 
@@ -188,11 +184,9 @@ class localizationlib:
             P[:,mask] = Pk[:,mask]
             CRLB[:,mask] = CRLBk[:,mask]
 
-            pbar.postfix[1]['time'] = toc+pbar._time()-pbar.start_t
-            pbar.update(1)
+            reporter.update(1)
 
-        toc = pbar.postfix[1]['time']
-        pbar.close()
+        reporter.close()
 
 
         zf = P[4].reshape((Nbead,Nz))
@@ -229,6 +223,5 @@ class localizationlib:
             log_likelihood=LL,
             spline_coefficients=coeff,
             mse_z_ratio=msezRatio,
-            toc=toc,
             positions=loc_dict,
         )

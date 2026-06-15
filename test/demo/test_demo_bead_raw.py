@@ -37,8 +37,10 @@ param.runtime.enable_relearning = True
 
 images = reader.read_images(param)
 # -- RUN --
-parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run_with_localization(param, images)
+from psflearning.progress import TqdmProgressReporter
+reporter = TqdmProgressReporter()
+parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
 # -- SAVE --
 parameters.io.output_path = output_dir
 
-resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images)
+resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images, reporter=reporter)

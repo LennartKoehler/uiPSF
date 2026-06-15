@@ -24,6 +24,7 @@ from .learning.psfs.PSFZernikeBase import PSFContext
 from .learning.psfs.IPSFModel import IPSFModel
 from .learning.fitters.Localizer import localize
 from .io.param import RejThresholdParams, RunParameters
+from .progress import ProgressReporter
 
 
 def initialize_psf(param: RunParameters, psf_info: PSFInfo):
@@ -65,8 +66,8 @@ def learn_psf(
     param: Union[RunParameters, DictConfig],
     dataobj,
     psf_info: PSFInfo,
-    time: Optional[float] = None,
-) -> Tuple[IPSFModel, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, Optional[float], PSFContext]:
+    reporter: ProgressReporter,
+) -> Tuple[IPSFModel, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, PSFContext]:
     """Run the PSF fitting optimisation.
 
     Parameters
@@ -77,23 +78,23 @@ def learn_psf(
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
-    time : float, optional
-        Start-time stamp for progress reporting.
+    reporter : ProgressReporter
+        Progress reporter.
 
     Returns
     -------
-    tuple of (IPSFModel, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, float, PSFContext)
-        ``(psf_model, fit_result, learner, variables, forward_images, toc, context)``
+    tuple of (IPSFModel, ZernikePSFResult, PSFLearner, ZernikePSFVariables, np.ndarray, PSFContext)
+        ``(psf_model, fit_result, learner, variables, forward_images, context)``
     """
     psf_model = initialize_psf(param, psf_info)
     initial_pupil = Reader.load_initial_pupil(param)
 
     learner = create_learner(param, psf_info)
 
-    variables, context, time = psf_model.calc_initials(dataobj, param, initial_pupil=initial_pupil, start_time=time)
-    fit_result, forward_images, toc = learner.learn_psf(dataobj, psf_model, variables, context, start_time=time)
+    variables, context = psf_model.calc_initials(dataobj, param, initial_pupil=initial_pupil)
+    fit_result, forward_images = learner.learn_psf(dataobj, psf_model, variables, context, reporter=reporter)
 
-    return psf_model, fit_result, learner, variables, forward_images, toc, context
+    return psf_model, fit_result, learner, variables, forward_images, context
 
 
 
@@ -102,8 +103,8 @@ def learn_psf_with_relearn(
     param: Union[RunParameters, DictConfig],
     data,
     psf_info: PSFInfo,
-    time: Optional[float] = None,
-) -> Tuple[IPSFModel, ZernikePSFResult, np.ndarray, float, PSFContext]:
+    reporter: ProgressReporter,
+) -> Tuple[IPSFModel, ZernikePSFResult, np.ndarray, PSFContext]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -119,15 +120,15 @@ def learn_psf_with_relearn(
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
-    time : float, optional
-        Start-time stamp for progress reporting.
+    reporter : ProgressReporter
+        Progress reporter.
 
     Returns
     -------
-    tuple of (IPSFModel, ZernikePSFResult, np.ndarray, float, PSFContext)
-        ``(psf_model, fit_result, forward_images, toc, context)``
+    tuple of (IPSFModel, ZernikePSFResult, np.ndarray, PSFContext)
+        ``(psf_model, fit_result, forward_images, context)``
     """
-    psf, fit_result, learner, variables, forward_images, toc, context = learn_psf(param, data, psf_info, time=time)
+    psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
     _, _, _, file_idxs = data.get_image_data()
 
@@ -148,20 +149,20 @@ def learn_psf_with_relearn(
             data, variables, mask
         )
         if filtered_vars is not None:
-            fit_result, forward_images, toc = learner.learn_psf(
-                data, psf, filtered_vars, context, start_time=toc,
+            fit_result, forward_images = learner.learn_psf(
+                data, psf, filtered_vars, context, reporter=reporter,
             )
 
 
-    return psf, fit_result, forward_images, toc, context
+    return psf, fit_result, forward_images, context
 
 
 def learn_psf_with_relearn_with_localization(
     param: Union[RunParameters, DictConfig],
     data,
     psf_info: PSFInfo,
-    time: Optional[float] = None,
-) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, float, PSFContext]:
+    reporter: ProgressReporter,
+) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -178,15 +179,15 @@ def learn_psf_with_relearn_with_localization(
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
-    time : float, optional
-        Start-time stamp for progress reporting.
+    reporter : ProgressReporter
+        Progress reporter.
 
     Returns
     -------
-    tuple of (IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, float, PSFContext)
-        ``(psf_model, fit_result, locres, forward_images, toc, context)``
+    tuple of (IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext)
+        ``(psf_model, fit_result, locres, forward_images, context)``
     """
-    psf, fit_result, learner, variables, forward_images, toc, context = learn_psf(param, data, psf_info, time=time)
+    psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
     _, _, _, file_idxs = data.get_image_data()
 
@@ -194,7 +195,7 @@ def learn_psf_with_relearn_with_localization(
     if len(file_idxs) > 1:
         threshold = param.model.rej_threshold
 
-        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, reporter=reporter)
 
         # remove outliers
         mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
@@ -214,13 +215,13 @@ def learn_psf_with_relearn_with_localization(
         )
 
         if filtered_vars is not None:
-            fit_result, forward_images, toc = learner.learn_psf(
-                data, psf, filtered_vars, context, start_time=toc,
+            fit_result, forward_images = learner.learn_psf(
+                data, psf, filtered_vars, context, reporter=reporter,
             )
-            locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+            locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, reporter=reporter)
 
 
     else:
-        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, reporter=reporter)
 
-    return psf, fit_result, locres, forward_images, toc, context
+    return psf, fit_result, locres, forward_images, context

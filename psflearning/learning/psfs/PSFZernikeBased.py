@@ -179,8 +179,7 @@ class PSFZernikeBased(PSFZernikeBase):
         data: PreprocessedImageDataInterface,
         params,
         initial_pupil: Optional[Union[np.ndarray, list]] = None,
-        start_time: float = 0.0,
-    ) -> tuple[ZernikePSFVariables, PSFContext, Any]:
+    ) -> tuple[ZernikePSFVariables, PSFContext]:
         """
         Provides initial values for the optimizable variables for the fitter class.
 
@@ -188,10 +187,9 @@ class PSFZernikeBased(PSFZernikeBase):
             data: Preprocessed image data.
             params: Imaging and model parameters (RunParameters).
             initial_pupil: Optional initial pupil from a previous fit.
-            start_time: Start-time stamp for progress reporting.
 
         Returns:
-            tuple of (ZernikePSFVariables, PSFContext, start_time)
+            tuple of (ZernikePSFVariables, PSFContext)
         """
 
         _, rois, _, _ = data.get_image_data()
@@ -271,7 +269,7 @@ class PSFZernikeBased(PSFZernikeBase):
             init_zernike_coeff_magnitude.astype(np.float32),
             init_zernike_coeff_phase.astype(np.float32),
             sigma.astype(np.float32),
-            init_drift_xy), context, start_time
+            init_drift_xy), context
 
     def calc_forward_images(self, variables, context: PSFContext, data=None) -> tf.Tensor:
         """

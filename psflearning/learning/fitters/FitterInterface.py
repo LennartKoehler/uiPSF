@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 import pickle
 
 import numpy as np
+from ...progress import ProgressReporter
 
 class FitterInterface:
     """
@@ -18,7 +19,7 @@ class FitterInterface:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def learn_psf(self, data, psf, variables, start_time=None):
+    def learn_psf(self, data, psf, variables, reporter):
         """
         Run the PSF learning optimization.
 
@@ -30,13 +31,13 @@ class FitterInterface:
             PSF model for forward image computation.
         variables : LearnablePSFParameters
             Initial learnable variables.
-        start_time : float, optional
-            Start-time stamp for progress reporting.
+        reporter : ProgressReporter
+            Progress reporter.
 
         Returns
         -------
         tuple
-            ``(psfResult, forward_images, toc)``
+            ``(psfResult, forward_images)``
         """
         raise NotImplementedError("You need to implement a 'learn_psf' method in your fitter class.")
 

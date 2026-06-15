@@ -12,7 +12,6 @@ import h5py as h5
 import json
 import numpy as np
 import tifffile
-from tqdm import tqdm
 from abc import ABC, abstractmethod
 
 from .learning.loclib import LocalizationResult
@@ -20,6 +19,7 @@ from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.IPSFModel import IPSFModel, PupilField
 from .learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .io.param import RunParameters
+from .progress import ProgressReporter, SilentReporter
 
 
 @dataclass
@@ -47,6 +47,7 @@ class Writer(ABC):
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
         forward_images: Optional[np.ndarray] = None,
+        reporter: Optional[ProgressReporter] = None,
     ) -> str:
         pass
 
@@ -61,11 +62,18 @@ class DefaultWriter(Writer):
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
         forward_images: Optional[np.ndarray] = None,
+        reporter: Optional[ProgressReporter] = None,
     ) -> str:
+
+        if reporter is None:
+            reporter = SilentReporter()
+
+        reporter.begin_stage("6/6: saving results")
         print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
         os.makedirs(param.io.output_path, exist_ok=True)
         savename = os.path.join(param.io.output_path, param.model.psf_type)
         self.write_psf(learning_result.psf_model_image, savename + ".tif")
+        reporter.close()
 
         return "succcess"
 
@@ -87,6 +95,7 @@ class H5Writer(Writer):
         learning_result: ZernikePSFResult,
         loc_result: LocalizationResult,
         forward_images: Optional[np.ndarray] = None,
+        reporter: Optional[ProgressReporter] = None,
     ) -> str:
         """Save fitting results, localisation results, and ROI data to a file.
 
@@ -105,18 +114,18 @@ class H5Writer(Writer):
         forward_images : np.ndarray, optional
             Forward images from the learning step. Used for ``modeled_roi_images`` in
             the saved ROIs result.
+        reporter : ProgressReporter, optional
+            Progress reporter for display.
 
         Returns
         -------
         str
             Path to the written HDF5 file.
         """
-        toc = loc_result.toc
-        pbar = tqdm(
-            desc="6/6: saving results",
-            bar_format="{desc}: [{elapsed}s] {postfix[0]}{postfix[1][time]:>4.2f}s",
-            postfix=["total time: ", dict(time=toc)],
-        )
+        if reporter is None:
+            reporter = SilentReporter()
+
+        reporter.begin_stage("6/6: saving results")
 
         savename = param.io.output_path + "_" + param.model.psf_type
         result_dict = _build_result_dict(learning_result, pupil_field, dataobj)
@@ -135,9 +144,8 @@ class H5Writer(Writer):
         resfile = savename + ".h5"
         self.write_to_file(param, resfile, result_dict, loc_result, rois)
 
-        pbar.postfix[1]["time"] = toc + pbar._time() - pbar.start_t
-        pbar.update()
-        pbar.close()
+        reporter.update(1)
+        reporter.close()
         return resfile
 
     # ── HDF5 I/O ────────────────────────────────────────────────────────

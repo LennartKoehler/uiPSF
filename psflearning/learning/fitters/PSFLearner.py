@@ -9,12 +9,11 @@ from psflearning.io.param import RejThresholdParams
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 from psflearning.learning.psfs.PSFZernikeBase import PSFContext
 
-from ..loclib import LocalizationResult
+from ...progress import ProgressReporter
 from .FitterInterface import FitterInterface
 from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from ..psfs.IPSFModel import LearnablePSFParameters, IPSFModel
 from ..optimizers import OptimizerABC
-from tqdm import tqdm
 from typing import Any, Callable, List, Optional, Tuple
 
 
@@ -70,8 +69,8 @@ class PSFLearner(FitterInterface):
         psf: IPSFModel,
         variables: ZernikePSFVariables,
         context: PSFContext,
-        start_time: Optional[float] = None,
-    ) -> Tuple[ZernikePSFResult, np.ndarray, float]:
+        reporter: ProgressReporter,
+    ) -> Tuple[ZernikePSFResult, np.ndarray]:
         """
         Run the PSF learning optimization.
 
@@ -85,27 +84,25 @@ class PSFLearner(FitterInterface):
             Initial learnable variables.
         context : PSFContext
             PSF context carrying all operational state.
-        start_time : float, optional
-            Start-time stamp for progress reporting.
+        reporter : ProgressReporter
+            Progress reporter.
 
         Returns
         -------
-        tuple of (ZernikePSFResult, np.ndarray, float)
-            ``(fit_result, forward_images, toc)``
+        tuple of (ZernikePSFResult, np.ndarray)
+            ``(fit_result, forward_images)``
         """
         objective = self._make_objective(psf, data.measured_roi_images, context, data=data)
 
-        pbar = tqdm(total=self.optimizer.maxiter + 50, desc='3/6: learning', bar_format="{desc}: {n_fmt}/{total_fmt} [{elapsed}s] {rate_fmt}, {postfix[0]}{postfix[2][loss]:>4.5f}, {postfix[1]}{postfix[2][time]:>4.2f}s", postfix=["current loss: ", "total time: ", dict(loss=0, time=start_time)])
-
-        variables = self.optimizer.minimize(objective, variables, pbar)
-        toc = pbar.postfix[-1]['time']
-        pbar.close()
+        reporter.begin_stage("3/6: learning", total=self.optimizer.maxiter + 50, show_loss=True)
+        variables = self.optimizer.minimize(objective, variables, reporter)
+        reporter.close()
 
         forward_images = psf.calc_forward_images(variables, context, data=data).numpy()
 
         fit_result = psf.postprocess(data, variables, context)
 
-        return fit_result, forward_images, toc
+        return fit_result, forward_images
 
 def filter_by_mask(
     data: PreprocessedImageDataSingleChannel,

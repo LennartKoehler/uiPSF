@@ -364,7 +364,7 @@ class IPSFModel(ABC):
             params: Imaging and model parameters.
 
         Returns:
-            tuple of (variables, context, start_time)
+            tuple of (variables, context)
         """
         raise NotImplementedError("You need to implement a 'calc_initials' method in your psf class.")
 

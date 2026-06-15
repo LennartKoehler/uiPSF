@@ -8,6 +8,7 @@ All rights reserved
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from .psfs.IPSFModel import LearnablePSFParameters, LearnableParameter, ParameterScope
+from ..progress import ProgressReporter, SilentReporter
 import time
 
 from typing import Any, List
@@ -66,7 +67,7 @@ class OptimizerABC:
         """
         raise NotImplementedError("You need to implement a 'create_actual_optimizer' method in your optimizer class.")
 
-    def minimize(self, objective, variables : LearnablePSFParameters, pbar):
+    def minimize(self, objective, variables : LearnablePSFParameters, reporter: ProgressReporter):
         """
         Adapts the given variables in a way that minimizes the given objective.
         Returns the same variables object (mutated in-place by the optimizer).
@@ -78,8 +79,7 @@ class OptimizerABC:
             with tf.GradientTape() as tape:
                 # No tape.watch() needed — tf.Variables are automatically watched
                 loss = objective(variables)
-            pbar.update(1)
-            pbar.set_description("current loss %f" % loss)
+            reporter.update(1, loss=loss)
             gradients = tape.gradient(loss, variablesTensor)
             self.opt.apply_gradients(zip(gradients, variablesTensor))
 
@@ -288,7 +288,7 @@ class L_BFGS_B(OptimizerABC):
         self.options = {**options, **kwargs}
         return None
 
-    def minimize(self, objective, variables: LearnablePSFParameters, pbar):
+    def minimize(self, objective, variables: LearnablePSFParameters, reporter: ProgressReporter):
         """
         Adapts the given variables in a way that minimizes the given objective.
         Returns the variables object with updated values.
@@ -299,9 +299,8 @@ class L_BFGS_B(OptimizerABC):
 
         init_var, meta = self._flatten_variables(variables)
         self.options['maxiter'] = self.maxiter
-        start_time = pbar.postfix[-1]['time']
 
-        scipy_fun = self._make_scipy_objective(objective, meta, pbar, start_time, mu)
+        scipy_fun = self._make_scipy_objective(objective, meta, reporter, mu)
         result = optimize.minimize(
             fun=scipy_fun, x0=init_var, jac=True,
             method='L-BFGS-B', options=self.options,
@@ -394,12 +393,12 @@ class L_BFGS_B(OptimizerABC):
     # Objective / gradient wrappers (closure-based, no mutable state)
     # ------------------------------------------------------------------
 
-    def _make_scipy_objective(self, objective, meta: _VariableMetadata, pbar, start_time, mu_init):
+    def _make_scipy_objective(self, objective, meta: _VariableMetadata, reporter: ProgressReporter, mu_init):
         """
         Creates and returns the function that scipy.optimize.minimize will call.
 
         The returned closure captures all the data it needs (objective, metadata,
-        progress bar, penalty parameter state) instead of storing it on ``self``.
+        reporter, penalty parameter state) instead of storing it on ``self``.
         This keeps data-dependent runtime state out of the optimizer instance.
 
         Returns a callable ``fun(var)`` that returns ``(loss_f64, grad_f64)``
@@ -410,7 +409,7 @@ class L_BFGS_B(OptimizerABC):
 
         def scipy_fun(var):
             loss, gradvec = self._compute_loss_and_gradient(
-                tf.cast(var, tf.float32), objective, meta, pbar, start_time, mu,
+                tf.cast(var, tf.float32), objective, meta, reporter, mu,
             )
             return (
                 np.real(loss.numpy()).astype(np.float64),
@@ -419,7 +418,7 @@ class L_BFGS_B(OptimizerABC):
 
         return scipy_fun
 
-    def _compute_loss_and_gradient(self, var, objective, meta: _VariableMetadata, pbar, start_time, mu):
+    def _compute_loss_and_gradient(self, var, objective, meta: _VariableMetadata, reporter: ProgressReporter, mu):
         """
         Computes the loss and gradient for one L-BFGS-B iteration.
 
@@ -442,8 +441,7 @@ class L_BFGS_B(OptimizerABC):
             The user's objective function.
         meta : _VariableMetadata
             Flattening metadata from ``_flatten_variables``.
-        pbar : tqdm progress bar
-        start_time : float
+        reporter : ProgressReporter
         mu : list[float]
             Single-element mutable list holding the current penalty parameter.
             Updated in-place to grow the penalty across iterations.
@@ -500,9 +498,7 @@ class L_BFGS_B(OptimizerABC):
                 else:
                     grad[k] = grad[k] + grad1[k] * w1
 
-        pbar.postfix[-1]['loss'] = loss
-        pbar.postfix[-1]['time'] = start_time + pbar._time() - pbar.start_t
-        pbar.update(1)
+        reporter.update(1, loss=loss)
         self.update_history(self.step + 1, time.time() - start, loss.numpy())
         self.step += 1
 

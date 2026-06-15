@@ -3,9 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from ..loclib import localizationlib, LocalizationResult
+from ...progress import ProgressReporter
 from ...io.param import RunParameters
 from omegaconf import DictConfig
-from typing import Optional, Union
+from typing import Union
 
 
 def localize(
@@ -13,7 +14,7 @@ def localize(
     psf_model_image: np.ndarray,
     rois: np.ndarray,
     param: Union[RunParameters, DictConfig],
-    toc: Optional[float] = None,
+    reporter: ProgressReporter,
 ) -> LocalizationResult:
     """Perform localization using the learned PSF model.
 
@@ -27,12 +28,12 @@ def localize(
         Measured ROI images.
     param : RunParameters or DictConfig
         Experiment parameters (uses ``param.runtime.use_cuda``).
-    toc : float, optional
-        Start time for progress reporting.
+    reporter : ProgressReporter
+        Progress reporter.
 
     Returns
     -------
     LocalizationResult
     """
     dll = localizationlib(usecuda=param.runtime.use_cuda)
-    return dll.loc_ast(rois, psf_model_image, pixelsize_z, initz=None, start_time=toc)
+    return dll.loc_ast(rois, psf_model_image, pixelsize_z, initz=None, reporter=reporter)

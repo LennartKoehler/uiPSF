@@ -58,6 +58,7 @@ from .fitting import (
 from .io.param import RunParameters
 from .learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
 from .learning.fitters.Localizer import localize
+from .progress import ProgressReporter, TqdmProgressReporter
 
 
 class PSFLearningLib:
@@ -74,7 +75,7 @@ class PSFLearningLib:
 
 
     @staticmethod
-    def run_with_localization(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
+    def learn_with_localization(parameters: RunParameters, images: PreprocessedImageDataInterface, reporter: Optional[ProgressReporter] = None) -> Tuple[
         RunParameters,
         IPSFModel,
         PreprocessedImageDataInterface,
@@ -83,20 +84,23 @@ class PSFLearningLib:
         np.ndarray,
         PSFContext]:
 
+        if reporter is None:
+            reporter = TqdmProgressReporter()
+
         psf_info = get_psf_info(parameters)
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.runtime.enable_relearning:
-            psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, loc_result, forward_images, context = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, reporter=reporter)
         else:
-            psf_model, learning_result, _, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
-            loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, toc=toc)
+            psf_model, learning_result, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
+            loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, reporter=reporter)
 
         return parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context
 
 
     @staticmethod
-    def run(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
+    def learn(parameters: RunParameters, images: PreprocessedImageDataInterface, reporter: Optional[ProgressReporter] = None) -> Tuple[
         RunParameters,
         IPSFModel,
         PreprocessedImageDataInterface,
@@ -104,13 +108,16 @@ class PSFLearningLib:
         np.ndarray,
         PSFContext]:
 
+        if reporter is None:
+            reporter = TqdmProgressReporter()
+
         psf_info = get_psf_info(parameters)
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.runtime.enable_relearning:
-            psf_model, learning_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, forward_images, context = learn_psf_with_relearn(parameters, dataobj, psf_info, reporter=reporter)
         else:
-            psf_model, learning_result, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
 
         return parameters, psf_model, dataobj, learning_result, forward_images, context
 
