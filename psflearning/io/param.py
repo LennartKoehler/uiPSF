@@ -30,6 +30,7 @@ class RefractiveIndices:
 class PSFModelParams:
     pupil_size: int = 64
     max_zernike_order: int = 8
+    zernike_polynomials: list = field(default_factory=list)
     extra_blur_sigma: float = 0.5
     include_apodization: bool = True
     constant_pupil_magnitude: bool = False
@@ -101,9 +102,6 @@ class RejThresholdParams:
     bias_z: float = 0.99
     mse: float = 0.8
     photon: float = 1.5
-
-    def values(self):
-        return [self.bias_z, self.mse, self.photon]
 
 
 # ── Group dataclasses ──────────────────────────────────────────────────

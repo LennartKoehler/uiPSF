@@ -4,6 +4,7 @@ Handles all output operations: serialising PSF fitting results to HDF5.
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict, dataclass
 from typing import Any, Optional, Union
 
@@ -62,7 +63,8 @@ class DefaultWriter(Writer):
         forward_images: Optional[np.ndarray] = None,
     ) -> str:
         print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
-        savename = param.io.output_path + "_" + param.model.psf_type
+        os.makedirs(param.io.output_path, exist_ok=True)
+        savename = os.path.join(param.io.output_path, param.model.psf_type)
         self.write_psf(learning_result.psf_model_image, savename + ".tif")
 
         return "succcess"

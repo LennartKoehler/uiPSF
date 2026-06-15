@@ -42,9 +42,9 @@ class PSFContext:
 
     params: RunParameters
     pupil_field: PupilField
-    bead_kernel: Optional[Any] = None
-    optimization_weights: Optional[OptimizationWeights] = None
-    initial_pupil: Optional[Union[np.ndarray, list]] = None
+    bead_kernel: tf.Tensor
+    optimization_weights: OptimizationWeights
+    initial_pupil: Optional[np.ndarray] = None
     defocus: Any = field(default_factory=lambda: np.float32(0))
     psf_type: str = 'scalar'
     max_magnitude_order: int = 100
@@ -134,26 +134,37 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
             Complex pupil function.
         """
         pf = context.pupil_field
-        c1 = pf.spherical_noll_indices
-        n_max = context.max_magnitude_order
-        Nk = np.min(((n_max + 1) * (n_max + 2) // 2, pf.zernike_polynomial_basis.shape[0]))
-        mask = c1 < Nk
-        c1 = c1[mask]
+        uses_custom_polys = bool(context.params.model.psf.zernike_polynomials)
 
-        if noll_index is not None:
+        if uses_custom_polys:
             pupil_mag = tf.reduce_sum(
-                pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+                pf.zernike_polynomial_basis * Zcoeff_mag * weight_mag, axis=0
             )
-        el        if context.params.model.psf.radially_symmetric_magnitude:
-            pupil_mag = tf.reduce_sum(
-                pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+            pupil_phase = tf.reduce_sum(
+                pf.zernike_polynomial_basis * Zcoeff_phase * weight_phase, axis=0
             )
         else:
-            pupil_mag = tf.reduce_sum(
-                pf.zernike_polynomial_basis[0:Nk] * Zcoeff_mag[0:Nk] * weight_mag, axis=0
-            )
+            c1 = pf.spherical_noll_indices
+            n_max = context.max_magnitude_order
+            Nk = np.min(((n_max + 1) * (n_max + 2) // 2, pf.zernike_polynomial_basis.shape[0]))
+            mask = c1 < Nk
+            c1 = c1[mask]
+
+            if noll_index is not None:
+                pupil_mag = tf.reduce_sum(
+                    pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+                )
+            elif context.params.model.psf.radially_symmetric_magnitude:
+                pupil_mag = tf.reduce_sum(
+                    pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
+                )
+            else:
+                pupil_mag = tf.reduce_sum(
+                    pf.zernike_polynomial_basis[0:Nk] * Zcoeff_mag[0:Nk] * weight_mag, axis=0
+                )
+            pupil_phase = tf.reduce_sum(pf.zernike_polynomial_basis[3:] * Zcoeff_phase[3:] * weight_phase, axis=0)
+
         pupil_mag = tfm.maximum(pupil_mag, 0)
-        pupil_phase = tf.reduce_sum(pf.zernike_polynomial_basis[3:] * Zcoeff_phase[3:] * weight_phase, axis=0)
 
         return self.magnitude_phase_to_pupil(pupil_mag, pupil_phase, context)
 

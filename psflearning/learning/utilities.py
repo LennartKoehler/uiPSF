@@ -130,6 +130,41 @@ def genZern1(n_max: int, xsz: int) -> np.ndarray:
     return Z
 
 
+def genZern1_selected(nm_pairs: list[tuple[int, int] | list[int]], xsz: int) -> np.ndarray:
+    """Generate specific Zernike polynomials identified by (n, m) pairs on an xsz x xsz grid.
+
+    Parameters
+    ----------
+    nm_pairs : list of (n, m) pairs
+        Each pair specifies the radial order n and azimuthal frequency m.
+        m >= 0 produces the cosine term; m < 0 produces the sine term.
+    xsz : int
+        Grid size.
+
+    Returns
+    -------
+    np.ndarray
+        Shape (len(nm_pairs), xsz, xsz) with one Zernike polynomial per pair.
+    """
+    Nk = len(nm_pairs)
+    Z = np.ones((Nk, xsz, xsz))
+    pkx = 2 / xsz
+    xr = np.linspace(-xsz / 2 + 0.5, xsz / 2 - 0.5, xsz)
+    xx, yy = np.meshgrid(xr, xr)
+    rho = np.lib.scimath.sqrt((xx * pkx) ** 2 + (yy * pkx) ** 2)
+    phi = np.arctan2(yy, xx)
+
+    for j, pair in enumerate(nm_pairs):
+        n, m = int(pair[0]), int(pair[1])
+        abs_m = abs(m)
+        r = radialpoly(n, abs_m, rho)
+        if m < 0:
+            Z[j] = r * np.sin(phi * abs_m)
+        else:
+            Z[j] = r * np.cos(phi * abs_m)
+    return Z
+
+
 
 
 def prechirpz1(kpixelsize: float, pixelsize_x: float, pixelsize_y: float, N: int, M: int) -> tuple[np.ndarray, tf.Tensor, np.ndarray]:

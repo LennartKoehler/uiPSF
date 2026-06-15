@@ -165,8 +165,8 @@ class IPSFModel(ABC):
         """
         pixel_upsampling_factor = params.model.psf.pixel_upsampling_factor
         Lx = data.measured_roi_images.shape[-1]*pixel_upsampling_factor
-        Ly = data.measured_roi_images.shape[-2]*pixel_upsampling_factor
-        Lz = data.measured_roi_images.shape[-3]
+        # Ly = data.measured_roi_images.shape[-2]*pixel_upsampling_factor
+        # Lz = data.measured_roi_images.shape[-3]
         xsz = params.model.psf.pupil_size
 
         xrange = np.linspace(-Lx/2+0.5, Lx/2-0.5, Lx)
@@ -184,10 +184,14 @@ class IPSFModel(ABC):
         nmed = params.data.refractive_indices.medium
         ncov = params.data.refractive_indices.coverslip
         n_max = params.model.psf.max_zernike_order
-        Zk = im.genZern1(n_max,xsz)
-
-        n1 = np.array(range(-1,n_max,2))
-        spherical_noll_indices = (n1+1)*(n1+2)//2
+        zernike_polys = params.model.psf.zernike_polynomials
+        if zernike_polys:
+            Zk = im.genZern1_selected(zernike_polys, xsz)
+            spherical_noll_indices = np.array([], dtype=np.int32)
+        else:
+            Zk = im.genZern1(n_max,xsz)
+            n1 = np.array(range(-1,n_max,2))
+            spherical_noll_indices = (n1+1)*(n1+2)//2
 
         pupilradius = 1
         krange = np.linspace(-pupilradius+pupilradius/xsz, pupilradius-pupilradius/xsz, xsz)

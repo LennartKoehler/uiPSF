@@ -21,6 +21,7 @@ param = io.param.load_params(psftype='zernike', sysfile='M2')
 # --- overwrite some params ---
 param.io.data_path = main_data_dir+'/1ch_40nm_bead'
 param.io.output_path = param.io.data_path+'psfmodel'
+param.io.output_path = output_dir
 param.io.keyword = 'Pos'
 param.io.subfolder = 'Pos'
 param.data.camera_gain = 0.22
@@ -36,7 +37,7 @@ param.runtime.enable_relearning = True
 
 images = reader.read_images(param)
 # -- RUN --
-parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run(param, images)
+parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run_with_localization(param, images)
 # -- SAVE --
 parameters.io.output_path = output_dir
 

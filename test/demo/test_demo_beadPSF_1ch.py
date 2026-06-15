@@ -38,7 +38,7 @@ param.runtime.enable_relearning = True
 
 images = reader.read_images(param)
 # -- RUN --
-parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run(param, images)
+parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.run_with_localization(param, images)
 # -- SAVE --
 
 resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images)
