@@ -49,4 +49,4 @@ resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_
 print('\nGenerating plots and saving to:', output_dir)
 plotter: Plotter = Plotter()
 
-saved = plotter.generate_report(learning_result, dataobj, learning_result, p, output_dir, index=1)
+saved = plotter.generate_report(learning_result, dataobj, learning_result, parameters, output_dir, index=1)

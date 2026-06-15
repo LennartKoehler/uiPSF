@@ -8,7 +8,7 @@ import tensorflow as tf
 import scipy.special as spf
 from typing import Any, List, Optional
 
-from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from ..data_representation.ImageData import ImageData
 from psflearning.io.param import RunParameters
 from .. import utilities as im
 from enum import Enum
@@ -143,7 +143,7 @@ class IPSFModel(ABC):
 
     @staticmethod
     def compute_pupil_field(
-        data: PreprocessedImageDataInterface,
+        data: ImageData,
         params: RunParameters,
         psf_type: str = 'vector',
         Nz: int = 21,
@@ -286,7 +286,7 @@ class IPSFModel(ABC):
 
 
     @staticmethod
-    def gen_bead_kernel(data: PreprocessedImageDataInterface, params: RunParameters, isVolume: bool = False) -> tf.Tensor:
+    def gen_bead_kernel(data: ImageData, params: RunParameters, isVolume: bool = False) -> tf.Tensor:
         """Generate a bead kernel for convolution with the PSF model.
 
         Pure function — no side effects.
@@ -336,7 +336,7 @@ class IPSFModel(ABC):
         return tf.exp(shiftphase)
 
     @staticmethod
-    def applyDrift(psfin: tf.Tensor, gxy: tf.Tensor, data: PreprocessedImageDataInterface, pupil_field: PupilField) -> tf.Tensor:
+    def applyDrift(psfin: tf.Tensor, gxy: tf.Tensor, data: ImageData, pupil_field: PupilField) -> tf.Tensor:
         """Apply drift or shift correction to a PSF using skew or linear drift."""
         otf2d = im.fft2d(tf.complex(psfin,0.0))
         if data.skew_const:
@@ -355,7 +355,7 @@ class IPSFModel(ABC):
         return psf_shift
 
     @abstractmethod
-    def calc_initials(self, data: PreprocessedImageDataInterface, params: RunParameters, **kwargs) -> tuple:
+    def calc_initials(self, data: ImageData, params: RunParameters, **kwargs) -> tuple:
         """
         Calculates the initial values for the optimizable variables.
 

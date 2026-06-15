@@ -8,11 +8,10 @@ import numpy as np
 import tensorflow as tf
 from scipy.ndimage import gaussian_filter
 
-from psflearning.learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+from psflearning.learning.data_representation.ImageData import ImageData
 
 from .PSFZernikeBase import PSFZernikeBase, PSFContext
 from .IPSFModel import LearnableParameter, LearnablePSFParameters, ParameterScope, PupilField
-from ..data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
 from .PSFZernikeBase import OptimizationWeights
 
 
@@ -176,7 +175,7 @@ class PSFZernikeBased(PSFZernikeBase):
 
     def calc_initials(
         self,
-        data: PreprocessedImageDataInterface,
+        data: ImageData,
         params,
         initial_pupil: Optional[Union[np.ndarray, list]] = None,
     ) -> tuple[ZernikePSFVariables, PSFContext]:
@@ -192,7 +191,7 @@ class PSFZernikeBased(PSFZernikeBase):
             tuple of (ZernikePSFVariables, PSFContext)
         """
 
-        _, rois, _, _ = data.get_image_data()
+        rois = data.measured_roi_images
 
         if params.model.psf.include_index_mismatch:
             init_positions = np.zeros((rois.shape[0], len(rois.shape)))
@@ -371,7 +370,7 @@ class PSFZernikeBased(PSFZernikeBase):
 
         return psf_model_image, pupil
 
-    def postprocess(self, data: PreprocessedImageDataSingleChannel, variables: ZernikePSFVariables, context: PSFContext) -> ZernikePSFResult:
+    def postprocess(self, data: ImageData, variables: ZernikePSFVariables, context: PSFContext) -> ZernikePSFResult:
         """
         Applies postprocessing to the optimized variables. In this case calculates
         real positions in the image from the positions in the roi. Also, normalizes
@@ -413,7 +412,7 @@ class PSFZernikeBased(PSFZernikeBase):
             )
 
         assert data is not None
-        _, _, centers, _ = data.get_image_data()
+        centers = data.roi_centers
 
         if positions.shape[1] > 3:
             global_positions = np.swapaxes(

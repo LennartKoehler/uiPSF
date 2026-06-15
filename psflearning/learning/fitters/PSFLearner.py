@@ -11,7 +11,7 @@ from psflearning.learning.psfs.PSFZernikeBase import PSFContext
 
 from ...progress import ProgressReporter
 from .FitterInterface import FitterInterface
-from ..data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+from ..data_representation.ImageData import ImageData
 from ..psfs.IPSFModel import LearnablePSFParameters, IPSFModel
 from ..optimizers import OptimizerABC
 from typing import Any, Callable, List, Optional, Tuple
@@ -65,7 +65,7 @@ class PSFLearner(FitterInterface):
 
     def learn_psf(
         self,
-        data: PreprocessedImageDataSingleChannel,
+        data: ImageData,
         psf: IPSFModel,
         variables: ZernikePSFVariables,
         context: PSFContext,
@@ -76,7 +76,7 @@ class PSFLearner(FitterInterface):
 
         Parameters
         ----------
-        data : PreprocessedImageDataSingleChannel
+        data : ImageData
             Image data (ROIs are read from here).
         psf : IPSFModel
             PSF model used to compute forward images and postprocessing.
@@ -105,14 +105,13 @@ class PSFLearner(FitterInterface):
         return fit_result, forward_images
 
 def filter_by_mask(
-    data: PreprocessedImageDataSingleChannel,
+    data: ImageData,
     variables: ZernikePSFVariables,
     mask: np.ndarray,
-) -> Optional[ZernikePSFVariables]:
-    """Remove outlier ROIs for single-channel data based on rejection metrics.
+) -> Optional[Tuple[ImageData, ZernikePSFVariables]]:
+    """Remove outlier ROIs based on rejection metrics.
 
-    Filters the data object in-place and returns filtered variables.
-    Returns the filtered variables if any outliers were removed,
+    Returns (filtered_data, filtered_variables) if outliers were removed,
     or *None* if no outliers were found (or all would be removed).
     """
 
@@ -122,14 +121,10 @@ def filter_by_mask(
     if not ((delete_id[0].size > 0) & (delete_id[0].size < mask.size)):
         return None
 
-    _, rois, centers, file_idxs = data.get_image_data()
-    data.measured_roi_images = rois[mask]
-    data.roi_centers = centers[mask, :]
-    data.source_file_indices = file_idxs[mask]
-    _, rois, _, _ = data.get_image_data()
-    logging.debug("rois shape channel : %s", rois.shape)
+    filtered_data = data.with_mask(mask)
+    logging.debug("rois shape channel : %s", filtered_data.measured_roi_images.shape)
 
-    return variables.filter_by_mask(mask)
+    return filtered_data, variables.filter_by_mask(mask)
 
 
 

@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from .learning.loclib import LocalizationResult
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult
 from .learning.psfs.IPSFModel import IPSFModel, PupilField
-from .learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from .learning.data_representation.ImageData import ImageData
 from .io.param import RunParameters
 from .progress import ProgressReporter, SilentReporter
 
@@ -45,7 +45,7 @@ class Writer(ABC):
         self,
         param: RunParameters,
         pupil_field: PupilField,
-        dataobj: PreprocessedImageDataInterface,
+        dataobj: ImageData,
         learning_result: ZernikePSFResult,
         forward_images: np.ndarray,
         loc_result: Optional[LocalizationResult] = None,
@@ -60,7 +60,7 @@ class DefaultWriter(Writer):
         self,
         param: RunParameters,
         pupil_field: PupilField,
-        dataobj: PreprocessedImageDataInterface,
+        dataobj: ImageData,
         learning_result: ZernikePSFResult,
         forward_images: np.ndarray,
         loc_result: Optional[LocalizationResult] = None,
@@ -91,7 +91,7 @@ class H5Writer(Writer):
         self,
         param: RunParameters,
         pupil_field: PupilField,
-        dataobj: PreprocessedImageDataInterface,
+        dataobj: ImageData,
         learning_result: ZernikePSFResult,
         forward_images: np.ndarray,
         loc_result: Optional[LocalizationResult] = None,
@@ -105,7 +105,7 @@ class H5Writer(Writer):
             Experiment parameters.
         pupil_field : PupilField
             Precomputed optical quantities (provides zernike_polynomial_basis, apodization).
-        dataobj : PreprocessedImageData
+        dataobj : ImageData
             Data object with extracted ROIs (provides roi_centers, roi_centers_all).
         learning_result : ZernikePSFResult
             Fitting output as returned by :func:`fitting.learn_psf`.
@@ -130,14 +130,12 @@ class H5Writer(Writer):
         savename = param.io.output_path + "_" + param.model.psf_type
         result_dict = _build_result_dict(learning_result, pupil_field, dataobj)
 
-        img, _, centers, file_idxs = dataobj.get_image_data()
-        img = np.stack(img)
         rois = ROIsResult(
-            roi_centers=np.stack(centers),
-            source_file_indices=np.stack(file_idxs),
+            roi_centers=np.stack(dataobj.roi_centers),
+            source_file_indices=np.stack(dataobj.source_file_indices),
             measured_roi_images=dataobj.measured_roi_images,
             modeled_roi_images=forward_images,
-            full_image_size=img.shape,
+            full_image_size=dataobj.image_size,
         )
 
         resfile = savename + ".h5"
@@ -200,7 +198,7 @@ class H5Writer(Writer):
 def _build_result_dict(
     learning_result: ZernikePSFResult,
     pupil_field: PupilField,
-    dataobj: PreprocessedImageDataInterface,
+    dataobj: ImageData,
 ) -> dict:
     """Build the result dict for HDF5 storage from a ZernikePSFResult.
 

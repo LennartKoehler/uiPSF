@@ -322,7 +322,7 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
 
         Args:
             psf: Input PSF tensor with shape (N, Nz, H, W) or similar.
-            data: PreprocessedImageData providing measured ROI shape.
+            data: ImageData providing measured ROI shape.
             context: PSF context providing z_range and bead_kernel.
 
         Returns:

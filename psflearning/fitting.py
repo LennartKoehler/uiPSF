@@ -74,7 +74,7 @@ def learn_psf(
     ----------
     param : DictConfig
         Experiment parameters.
-    dataobj : PreprocessedImageData
+    dataobj : ImageData
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
@@ -116,7 +116,7 @@ def learn_psf_with_relearn(
     ----------
     param : DictConfig
         Experiment parameters.
-    dataobj : PreprocessedImageData
+    dataobj : ImageData
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
@@ -130,7 +130,7 @@ def learn_psf_with_relearn(
     """
     psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
-    _, _, _, file_idxs = data.get_image_data()
+    file_idxs = data.source_file_indices
 
     if len(file_idxs) > 1:
         # remove outliers
@@ -145,10 +145,11 @@ def learn_psf_with_relearn(
         minI = get_minimum_intensity(fit_result.intensities)
         mask = (minI > 0) & mask
 
-        filtered_vars = filter_by_mask(
+        result = filter_by_mask(
             data, variables, mask
         )
-        if filtered_vars is not None:
+        if result is not None:
+            data, filtered_vars = result
             fit_result, forward_images = learner.learn_psf(
                 data, psf, filtered_vars, context, reporter=reporter,
             )
@@ -175,7 +176,7 @@ def learn_psf_with_relearn_with_localization(
     ----------
     param : DictConfig
         Experiment parameters.
-    dataobj : PreprocessedImageData
+    dataobj : ImageData
         Prepared data object with extracted ROIs.
     psf_info : PSFInfo
         As returned by :func:`psf_registry.get_psf_info`.
@@ -189,7 +190,7 @@ def learn_psf_with_relearn_with_localization(
     """
     psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
-    _, _, _, file_idxs = data.get_image_data()
+    file_idxs = data.source_file_indices
 
     # relearn
     if len(file_idxs) > 1:
@@ -210,11 +211,12 @@ def learn_psf_with_relearn_with_localization(
         mask = (locres.mse_z_ratio > threshold.bias_z) & mask
 
 
-        filtered_vars = filter_by_mask(
+        result = filter_by_mask(
             data, variables, mask
         )
 
-        if filtered_vars is not None:
+        if result is not None:
+            data, filtered_vars = result
             fit_result, forward_images = learner.learn_psf(
                 data, psf, filtered_vars, context, reporter=reporter,
             )

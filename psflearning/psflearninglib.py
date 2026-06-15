@@ -41,7 +41,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from omegaconf import DictConfig
 
-from psflearning.learning.data_representation.PreprocessedImageDataInterface import PreprocessedImageDataInterface
+from psflearning.learning.data_representation.ImageData import ImageData
 from psflearning.learning.psfs.IPSFModel import IPSFModel
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult
 from psflearning.learning.psfs.PSFZernikeBase import PSFContext
@@ -56,7 +56,8 @@ from .fitting import (
 )
 
 from .io.param import RunParameters
-from .learning.data_representation.PreprocessedImageDataSingleChannel import PreprocessedImageDataSingleChannel
+from .learning.data_representation.ImageData import ImageData
+from .learning.data_representation.PreprocessingPipeline import PreprocessingPipeline
 from .learning.fitters.Localizer import localize
 from .progress import ProgressReporter, TqdmProgressReporter
 
@@ -75,10 +76,10 @@ class PSFLearningLib:
 
 
     @staticmethod
-    def learn_with_localization(parameters: RunParameters, images: PreprocessedImageDataInterface, reporter: Optional[ProgressReporter] = None) -> Tuple[
+    def learn_with_localization(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
         RunParameters,
         IPSFModel,
-        PreprocessedImageDataInterface,
+        ImageData,
         ZernikePSFResult,
         LocalizationResult,
         np.ndarray,
@@ -100,10 +101,10 @@ class PSFLearningLib:
 
 
     @staticmethod
-    def learn(parameters: RunParameters, images: PreprocessedImageDataInterface, reporter: Optional[ProgressReporter] = None) -> Tuple[
+    def learn(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
         RunParameters,
         IPSFModel,
-        PreprocessedImageDataInterface,
+        ImageData,
         ZernikePSFResult,
         np.ndarray,
         PSFContext]:
@@ -124,7 +125,7 @@ class PSFLearningLib:
 
 
     @staticmethod
-    def _prep_data( param: Union[RunParameters, DictConfig], images: np.ndarray):
+    def _prep_data( param: Union[RunParameters, DictConfig], images: np.ndarray) -> ImageData:
         """Detect beads / localisations and build a data object.
 
         Parameters
@@ -136,7 +137,7 @@ class PSFLearningLib:
 
         Returns
         -------
-        PreprocessedImageData
+        ImageData
             Data object with extracted ROIs ready for PSF fitting.
         """
         roi_size = param.selection.roi.roi_size
@@ -152,8 +153,6 @@ class PSFLearningLib:
         ims = ims[zind]
         images = np.swapaxes(ims,0,-3)
 
-        dataobj = PreprocessedImageDataSingleChannel(images)
-
         fov_param = None if fov[2] == 0 else fov
         skew_param = (
             None
@@ -161,7 +160,8 @@ class PSFLearningLib:
             else skew_const
         )
 
-        dataobj.process(
+        return PreprocessingPipeline.process(
+            images=images,
             roi_size=roi_size,
             gaus_sigma=param.selection.roi.gauss_sigma,
             min_border_dist=list(np.array(roi_size) // 2 + 1),
@@ -175,10 +175,8 @@ class PSFLearningLib:
             bead_radius=param.selection.roi.bead_radius,
             plot=param.runtime.plot_all_steps,
             padPSF=True,
-            isVolume=False,
             skew_const=skew_param,
             max_bead_number=param.selection.roi.max_bead_number,
         )
-        return dataobj
 
 

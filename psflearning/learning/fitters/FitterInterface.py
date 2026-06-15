@@ -25,7 +25,7 @@ class FitterInterface:
 
         Parameters
         ----------
-        data : PreprocessedImageData
+        data : ImageData
             Image data with extracted ROIs.
         psf : IPSFModel
             PSF model for forward image computation.
