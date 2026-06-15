@@ -17,13 +17,13 @@ import numpy as np
 from .reader import Reader
 from omegaconf import DictConfig
 
-from .learning import PSFLearner, L_BFGS_B, LocalizationResult, remove_outliers
+from .learning import PSFLearner, L_BFGS_B, LocalizationResult, get_intensity_difference_ratio, get_minimum_intensity, get_MSE_difference_ratio, filter_by_mask
 from .psf_registry import PSFInfo
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 from .learning.psfs.PSFZernikeBase import PSFContext
 from .learning.psfs.IPSFModel import IPSFModel
 from .learning.fitters.Localizer import localize
-from .io.param import RunParameters
+from .io.param import RejThresholdParams, RunParameters
 
 
 def initialize_psf(param: RunParameters, psf_info: PSFInfo):
@@ -96,63 +96,6 @@ def learn_psf(
     return psf_model, fit_result, learner, variables, forward_images, toc, context
 
 
-def relearn(
-    data,
-    psf: IPSFModel,
-    learner: PSFLearner,
-    variables: ZernikePSFVariables,
-    forward_images: np.ndarray,
-    fit_result: ZernikePSFResult,
-    param: Union[RunParameters, DictConfig],
-    context: PSFContext,
-    toc: Optional[float] = None,
-    threshold: Optional[list] = None,
-) -> Tuple[ZernikePSFResult, LocalizationResult, np.ndarray, Optional[float]]:
-    """Remove outliers, re-learn PSF, then re-localize.
-
-    Parameters
-    ----------
-    data : PreprocessedImageData
-        Data object with ROIs.
-    psf : IPSFModel
-        Fitted PSF model.
-    learner : PSFLearner
-        The learner instance (holds optimizer and loss function).
-    variables : ZernikePSFVariables
-        Optimized variables from the previous learning step.
-    forward_images : np.ndarray
-        Forward images from the previous learning step.
-    fit_result : ZernikePSFResult
-        Current learning result.
-    param : DictConfig
-        Experiment parameters.
-    context : PSFContext
-        PSF context carrying all operational state.
-    toc : float, optional
-        Current end time.
-    threshold : list, optional
-        Custom rejection thresholds. If None, uses param.model.rej_threshold.
-
-    Returns
-    -------
-    tuple of (ZernikePSFResult, LocalizationResult, np.ndarray, float)
-        ``(fit_result, locres, forward_images, toc)``
-    """
-    if threshold is None:
-        threshold = list(param.model.rej_threshold.values())
-
-    locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
-
-    filtered_vars = remove_outliers(
-        data, variables, fit_result, locres, forward_images, threshold,
-    )
-    if filtered_vars is not None:
-        fit_result, forward_images, toc = learner.learn_psf(
-            data, psf, filtered_vars, context, start_time=toc,
-        )
-        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
-
-    return fit_result, locres, forward_images, toc
 
 
 def learn_psf_with_relearn(
@@ -160,7 +103,65 @@ def learn_psf_with_relearn(
     data,
     psf_info: PSFInfo,
     time: Optional[float] = None,
-) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, Optional[float], PSFContext]:
+) -> Tuple[IPSFModel, ZernikePSFResult, np.ndarray, float, PSFContext]:
+    """Learn PSF, localize, remove outliers and re-learn.
+
+    Replicates the original learn_psf pipeline:
+    1. Learn the PSF model.
+    3. For multi-file data: remove outliers based on rejection metrics,
+       re-learn the PSF.
+
+    Parameters
+    ----------
+    param : DictConfig
+        Experiment parameters.
+    dataobj : PreprocessedImageData
+        Prepared data object with extracted ROIs.
+    psf_info : PSFInfo
+        As returned by :func:`psf_registry.get_psf_info`.
+    time : float, optional
+        Start-time stamp for progress reporting.
+
+    Returns
+    -------
+    tuple of (IPSFModel, ZernikePSFResult, np.ndarray, float, PSFContext)
+        ``(psf_model, fit_result, forward_images, toc, context)``
+    """
+    psf, fit_result, learner, variables, forward_images, toc, context = learn_psf(param, data, psf_info, time=time)
+
+    _, _, _, file_idxs = data.get_image_data()
+
+    if len(file_idxs) > 1:
+        # remove outliers
+        threshold = param.model.rej_threshold
+
+        mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
+        mask = mseRatio > threshold.mse
+
+        intensityRatio = get_intensity_difference_ratio(fit_result.intensities)
+        mask = (intensityRatio > threshold.photon) & mask
+
+        minI = get_minimum_intensity(fit_result.intensities)
+        mask = (minI > 0) & mask
+
+        filtered_vars = filter_by_mask(
+            data, variables, mask
+        )
+        if filtered_vars is not None:
+            fit_result, forward_images, toc = learner.learn_psf(
+                data, psf, filtered_vars, context, start_time=toc,
+            )
+
+
+    return psf, fit_result, forward_images, toc, context
+
+
+def learn_psf_with_relearn_with_localization(
+    param: Union[RunParameters, DictConfig],
+    data,
+    psf_info: PSFInfo,
+    time: Optional[float] = None,
+) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, float, PSFContext]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -189,11 +190,36 @@ def learn_psf_with_relearn(
 
     _, _, _, file_idxs = data.get_image_data()
 
+    # relearn
     if len(file_idxs) > 1:
-        fit_result, locres, forward_images, toc = relearn(
-            data, psf, learner, variables, forward_images,
-            fit_result, param, context, toc=toc,
+        threshold = param.model.rej_threshold
+
+        locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+
+        # remove outliers
+        mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
+        mask = mseRatio > threshold.mse
+
+        intensityRatio = get_intensity_difference_ratio(fit_result.intensities)
+        mask = (intensityRatio > threshold.photon) & mask
+
+        minI = get_minimum_intensity(fit_result.intensities)
+        mask = (minI > 0) & mask
+
+        mask = (locres.mse_z_ratio > threshold.bias_z) & mask
+
+
+        filtered_vars = filter_by_mask(
+            data, variables, mask
         )
+
+        if filtered_vars is not None:
+            fit_result, forward_images, toc = learner.learn_psf(
+                data, psf, filtered_vars, context, start_time=toc,
+            )
+            locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
+
+
     else:
         locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, toc=toc)
 

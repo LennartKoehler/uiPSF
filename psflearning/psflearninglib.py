@@ -51,7 +51,8 @@ from psflearning.learning.loclib import LocalizationResult
 from .psf_registry import get_psf_info
 from .fitting import (
     learn_psf,
-    learn_psf_with_relearn,
+    learn_psf_with_relearn_with_localization,
+    learn_psf_with_relearn
 )
 
 from .io.param import RunParameters
@@ -73,7 +74,7 @@ class PSFLearningLib:
 
 
     @staticmethod
-    def run(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
+    def run_with_localization(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
         RunParameters,
         IPSFModel,
         PreprocessedImageDataInterface,
@@ -86,13 +87,32 @@ class PSFLearningLib:
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.runtime.enable_relearning:
-            psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
+            psf_model, learning_result, loc_result, forward_images, toc, context = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, time=0)
         else:
             psf_model, learning_result, _, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
             loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, toc=toc)
 
         return parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context
 
+
+    @staticmethod
+    def run(parameters: RunParameters, images: PreprocessedImageDataInterface) -> Tuple[
+        RunParameters,
+        IPSFModel,
+        PreprocessedImageDataInterface,
+        ZernikePSFResult,
+        np.ndarray,
+        PSFContext]:
+
+        psf_info = get_psf_info(parameters)
+        dataobj = PSFLearningLib._prep_data(parameters, images)
+
+        if parameters.runtime.enable_relearning:
+            psf_model, learning_result, forward_images, toc, context = learn_psf_with_relearn(parameters, dataobj, psf_info, time=0)
+        else:
+            psf_model, learning_result, _, forward_images, toc, context = learn_psf(parameters, dataobj, psf_info, time=0)
+
+        return parameters, psf_model, dataobj, learning_result, forward_images, context
 
 
 

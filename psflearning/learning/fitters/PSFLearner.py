@@ -5,6 +5,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 
+from psflearning.io.param import RejThresholdParams
 from psflearning.learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 from psflearning.learning.psfs.PSFZernikeBase import PSFContext
 
@@ -106,13 +107,10 @@ class PSFLearner(FitterInterface):
 
         return fit_result, forward_images, toc
 
-def remove_outliers(
+def filter_by_mask(
     data: PreprocessedImageDataSingleChannel,
     variables: ZernikePSFVariables,
-    res: ZernikePSFResult,
-    locres: LocalizationResult,
-    forward_images: np.ndarray,
-    threshold: list,
+    mask: np.ndarray,
 ) -> Optional[ZernikePSFVariables]:
     """Remove outlier ROIs for single-channel data based on rejection metrics.
 
@@ -120,12 +118,7 @@ def remove_outliers(
     Returns the filtered variables if any outliers were removed,
     or *None* if no outliers were found (or all would be removed).
     """
-    metric, minI = create_reject_metric(
-        res,
-        locres,
-        forward_images,
-        data.measured_roi_images)
-    mask = get_mask(metric, minI, threshold)
+
     delete_id = np.where(~mask)
     logging.info('outlier id: %s', str(delete_id[0]))
 
@@ -142,40 +135,49 @@ def remove_outliers(
     return variables.filter_by_mask(mask)
 
 
-def get_mask(metric, minI, threshold):
-    mask = metric[0] > -1
-    for i, val in enumerate(metric):
-        mask = (val < threshold[i]) & mask
-    mask = (minI > 0) & mask
-    return mask
 
-def create_reject_metric(
-    res: ZernikePSFResult,
-    locres: LocalizationResult,
+def get_MSE_difference_ratio(
     modeled_forward_images: np.ndarray,
     measured_bead_images: np.ndarray
-) -> Tuple[List[np.ndarray], Any]:
-
-    intensity = np.abs(np.squeeze(res.intensities, axis=(-1, -2)))
-    if res.intensities.dtype == 'complex64':
-        intensityR = intensity
-    else:
-        intensityR = np.real(np.squeeze(res.intensities, axis=(-1, -2)))
+) -> np.ndarray:
     mydiff = modeled_forward_images[:, 1:-1] - measured_bead_images[:, 1:-1]
-    mse1 = np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(measured_bead_images, axis=(-3, -2, -1))
-
-    if len(intensity.shape) < 2:
-        avgI = intensity
-        minI = intensityR
-    else:
-        avgI = np.median(intensity, axis=1)
-        minI = np.min(intensityR, axis=1)
+    mse = np.mean(np.square(mydiff), axis=(-3, -2, -1)) / np.mean(measured_bead_images, axis=(-3, -2, -1))
 
     if measured_bead_images.shape[0] == 1:
-        intRatio = np.array([1.0])
         mseRatio = np.array([1.0])
     else:
+        mseRatio = mse / np.median(mse)
+    return mseRatio
+
+
+def get_minimum_intensity(
+    intensities: np.ndarray
+)-> np.ndarray:
+    absolute_intensities = np.abs(np.squeeze(intensities, axis=(-1, -2)))
+    if intensities.dtype == 'complex64':
+        intensityR = absolute_intensities
+    else:
+        intensityR = np.real(np.squeeze(intensities, axis=(-1, -2)))
+
+    if len(absolute_intensities.shape) < 2:
+        minI = intensityR
+    else:
+        minI = np.min(intensityR, axis=1)
+
+    return minI
+
+def get_intensity_difference_ratio(
+    intensities: np.ndarray
+)-> np.ndarray:
+
+    absolute_intensities = np.abs(np.squeeze(intensities, axis=(-1, -2)))
+    if len(absolute_intensities.shape) < 2:
+        avgI = absolute_intensities
+    else:
+        avgI = np.median(absolute_intensities, axis=1)
+
+    if absolute_intensities.shape[0] == 1:
+        intRatio = np.array([1.0])
+    else:
         intRatio = np.square(avgI - np.median(avgI)) / np.median(avgI) / avgI
-        mseRatio = mse1 / np.median(mse1)
-    msezRatio = locres.mse_z_ratio
-    return [msezRatio, mseRatio, intRatio], minI
+    return intRatio
