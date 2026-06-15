@@ -47,7 +47,7 @@ Params:
     psf:
       pupil_size: 64
       max_zernike_order: 8
-      zernike_polynomials: [[1,1],[0,2],[2,2]]
+      # zernike_polynomials: [[1,1],[0,2],[2,2]]
       extra_blur_sigma: 0.5
       include_apodization: true
       constant_pupil_magnitude: false

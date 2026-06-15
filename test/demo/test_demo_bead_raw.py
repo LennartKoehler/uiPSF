@@ -43,4 +43,4 @@ parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLe
 # -- SAVE --
 parameters.io.output_path = output_dir
 
-resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images, reporter=reporter)
+resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, forward_images=forward_images, reporter=reporter)

@@ -60,19 +60,21 @@ class Plotter:
         fmt: str = "png",
         dpi: int = 150,
     ):
-        pixel_size_z = p.pixel_size.z
+        pixel_size_z = p.data.pixel_size.z
 
         zernike_paths = None
         pupil_paths = None
+
 
         fig = self.plot_psf_vs_data(
             rois.measured_roi_images, rois.modeled_roi_images,
             pixel_size_z=pixel_size_z,
             index=index,
         )
+
         psf_vs_data_paths = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
 
-        fig = self.plot_localization(locres.localized_positions, p.pixel_size)
+        fig = self.plot_localization(locres.localized_positions, p.data.pixel_size)
         localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
 
         try:

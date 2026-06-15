@@ -35,6 +35,8 @@ class ROIsResult:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+def write_tiff(psf: np.ndarray, filepath: str) -> None:
+    tifffile.imwrite(filepath, psf.astype(np.float32))
 
 class Writer(ABC):
 
@@ -45,8 +47,8 @@ class Writer(ABC):
         pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: LocalizationResult,
-        forward_images: Optional[np.ndarray] = None,
+        loc_result: Optional[LocalizationResult],
+        forward_images: np.ndarray,
         reporter: Optional[ProgressReporter] = None,
     ) -> str:
         pass
@@ -60,8 +62,8 @@ class DefaultWriter(Writer):
         pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: LocalizationResult,
-        forward_images: Optional[np.ndarray] = None,
+        forward_images: np.ndarray,
+        loc_result: Optional[LocalizationResult] = None,
         reporter: Optional[ProgressReporter] = None,
     ) -> str:
 
@@ -72,13 +74,11 @@ class DefaultWriter(Writer):
         print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
         os.makedirs(param.io.output_path, exist_ok=True)
         savename = os.path.join(param.io.output_path, param.model.psf_type)
-        self.write_psf(learning_result.psf_model_image, savename + ".tif")
+        write_tiff(learning_result.psf_model_image, savename + ".tif")
         reporter.close()
 
         return "succcess"
 
-    def write_psf(self, psf: np.ndarray, filepath: str) -> None:
-        tifffile.imwrite(filepath, psf.astype(np.float32))
 
 
 class H5Writer(Writer):
@@ -93,8 +93,8 @@ class H5Writer(Writer):
         pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: LocalizationResult,
-        forward_images: Optional[np.ndarray] = None,
+        loc_result: Optional[LocalizationResult],
+        forward_images: np.ndarray,
         reporter: Optional[ProgressReporter] = None,
     ) -> str:
         """Save fitting results, localisation results, and ROI data to a file.
@@ -132,17 +132,17 @@ class H5Writer(Writer):
 
         img, _, centers, file_idxs = dataobj.get_image_data()
         img = np.stack(img)
-        modeled_forward_images = forward_images if forward_images is not None else np.array([])
         rois = ROIsResult(
             roi_centers=np.stack(centers),
             source_file_indices=np.stack(file_idxs),
             measured_roi_images=dataobj.measured_roi_images,
-            modeled_roi_images=modeled_forward_images,
+            modeled_roi_images=forward_images,
             full_image_size=img.shape,
         )
 
         resfile = savename + ".h5"
         self.write_to_file(param, resfile, result_dict, loc_result, rois)
+
 
         reporter.update(1)
         reporter.close()
@@ -155,7 +155,7 @@ class H5Writer(Writer):
         param: RunParameters,
         filename: str,
         res: dict,
-        locres: LocalizationResult,
+        loc_result: Optional[LocalizationResult],
         rois: ROIsResult,
     ) -> None:
         """Write result dicts to an HDF5 file.
@@ -176,7 +176,8 @@ class H5Writer(Writer):
         param_dict = param.to_dict()
         with h5.File(filename, "w") as f:
             f.attrs["params"] = json.dumps(param_dict)
-            self._write_group(f.create_group("locres"), locres.to_dict())
+            if loc_result:
+                self._write_group(f.create_group("locres"), loc_result.to_dict())
             self._write_group(f.create_group("res"), res)
             self._write_group(f.create_group("rois"), rois.to_dict())
 
