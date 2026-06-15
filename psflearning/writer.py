@@ -47,8 +47,8 @@ class Writer(ABC):
         pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: Optional[LocalizationResult],
         forward_images: np.ndarray,
+        loc_result: Optional[LocalizationResult] = None,
         reporter: Optional[ProgressReporter] = None,
     ) -> str:
         pass
@@ -93,8 +93,8 @@ class H5Writer(Writer):
         pupil_field: PupilField,
         dataobj: PreprocessedImageDataInterface,
         learning_result: ZernikePSFResult,
-        loc_result: Optional[LocalizationResult],
         forward_images: np.ndarray,
+        loc_result: Optional[LocalizationResult] = None,
         reporter: Optional[ProgressReporter] = None,
     ) -> str:
         """Save fitting results, localisation results, and ROI data to a file.

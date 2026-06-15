@@ -16,6 +16,9 @@ from typing import Any
 
 from .PreprocessedImageDataInterface import PreprocessedImageDataInterface
 
+
+
+
 class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
     """
     Class that handles preprocessed data for single-channel case.
@@ -31,7 +34,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.measured_roi_images = np.array([])
         self.roi_centers = np.array([])
         self.source_file_indices = np.array([])
-        self.rois_extracted = False
         self.min_border_dist = None # needed in cut_new_rois()
         self.skew_const = None
         return
@@ -100,7 +102,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.roi_centers = np.concatenate(all_centers)[0:L].astype(np.int32)
         self.roi_centers_all = np.concatenate(all_centers)[0:L].astype(np.int32)
         self.source_file_indices = np.array(file_idxs)[0:L].astype(np.int32)
-        self.rois_extracted = True
         self.image_size = self.images.shape
         return
 
@@ -169,7 +170,6 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         self.measured_roi_images = np.concatenate(new_rois).astype(np.float32)
         self.roi_centers = centers.astype(np.int32)
         self.source_file_indices = file_idxs.astype(np.int32)
-        self.rois_extracted = True
 
         return
 
@@ -178,10 +178,7 @@ class PreprocessedImageDataSingleChannel(PreprocessedImageDataInterface):
         Provides the necessary image information (e.g., rois, centers, ...) for the psf class
         and the fitter class.
         """
-        if self.rois_extracted:
-            return self.images, self.measured_roi_images, self.roi_centers, self.source_file_indices
-        else:
-            raise RuntimeError("Can't call 'get_image_data()' since 'rois_available' flag is False.\nThis is probably due to the fact that you did not call 'find_rois()' before using this ImageData.")
+        return self.images, self.measured_roi_images, self.roi_centers, self.source_file_indices
 
     def process(self, roi_size: Any, gaus_sigma: float, min_border_dist: Any, max_threshold: float, max_kernel: Any, pixelsize_x: float, pixelsize_z: float, bead_radius: float,
                 min_center_dist: float | None = None, FOV: Any = None, padPSF: bool = True, plot: bool = True, isVolume: bool = True, pixelsize_y: float | None = None, skew_const: Any = None, max_bead_number: int | None = None) -> None:

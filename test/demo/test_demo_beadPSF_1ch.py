@@ -40,15 +40,13 @@ images = reader.read_images(param)
 # -- RUN --
 from psflearning.progress import TqdmProgressReporter
 reporter = TqdmProgressReporter()
-parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context = PSFLearningLib.learn_with_localization(param, images, reporter=reporter)
+parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
 # -- SAVE --
 
-resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, loc_result, forward_images, reporter=reporter)
-
-f, p = io.h5.load(resfile)
+resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, forward_images, reporter=reporter)
 
 # -- PLOT & SAVE --
 print('\nGenerating plots and saving to:', output_dir)
 plotter: Plotter = Plotter()
 
-saved = plotter.generate_report(f.res, f.rois, f.locres, p, output_dir, index=1)
+saved = plotter.generate_report(learning_result, dataobj, learning_result, p, output_dir, index=1)
