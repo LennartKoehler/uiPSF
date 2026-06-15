@@ -1,11 +1,15 @@
-# uiPSF: Universal inverse modelling of point spread functions for SMLM localization and microscope characterization 
-The point spread function (PSF) of a microscope describes the image of a point emitter. Knowing the accurate PSF model is essential for various imaging tasks, including single molecule localization, aberration correction or deconvolution. 
+# uiPSF: Universal inverse modelling of point spread functions for SMLM localization and microscope characterization
+The point spread function (PSF) of a microscope describes the image of a point emitter. Knowing the accurate PSF model is essential for various imaging tasks, including single molecule localization, aberration correction or deconvolution.
 
 Here we present uiPSF (universal inverse modelling of Point Spread Functions), a toolbox to infer accurate PSF models either from image stacks of fluorescent beads or directly from images of single blinking fluorophores, the raw data in SMLM. It is a powerful tool to characterize and optimize a microscope as it reports the aberration modes, including field-dependent aberrations.  The resulting PSF model enables accurate 3D super-resolution imaging using single molecule localization microscopy.
 Our modular framework is applicable to a variety of microscope geometries, and the forward model can include system specific characteristics such as the bead size, camera pixel size and transformations among channels. We demonstrate its application in single objective systems with single or multiple channels, 4Pi-SMLM, and lattice light-sheet microscopes.
 
-**Reference**:  
+**Reference**:
 [Liu, S., Chen, J., Hellgoth, J. et al. Universal inverse modeling of point spread functions for SMLM localization and microscope characterization. Nat Methods 21, 1082–1093 (2024).](https://doi.org/10.1038/s41592-024-02282-x)
+
+
+**ADDON**
+See the [Specifics for this branch](README_addon.md).
 
 # System requirements
 ## Hardware
@@ -42,17 +46,17 @@ ipykernel
 ## Windows
 Installation time for the GPU version is around 10 minutes.
 1. Install miniconda for windows, [miniconda](https://docs.conda.io/en/latest/miniconda.html)
-2. Open Anaconda Powershell Prompt, clone the uiPSF package     
+2. Open Anaconda Powershell Prompt, clone the uiPSF package
 ```
 git clone https://github.com/ries-lab/uiPSF.git
 cd uiPSF
 ```
-3. Create a new conda enviroment for the uiPSF package  
-- for GPU: 
+3. Create a new conda enviroment for the uiPSF package
+- for GPU:
 ```
 conda env create --name psfinv --file=environment.yml
-```   
-- for CPU: 
+```
+- for CPU:
 ```
 conda create --name psfinv python=3.7.10
 ```
@@ -64,17 +68,17 @@ pip install -e .
 
 ## Mac
 1. Install [miniconda](https://docs.conda.io/en/latest/miniconda.html) for Mac.
-2. Open Terminal and follow the [installation for Windows](#Windows) to install the uiPSF package. Only the CPU version is supported. 
+2. Open Terminal and follow the [installation for Windows](#Windows) to install the uiPSF package. Only the CPU version is supported.
 
 ## Linux
 1. Install [miniconda](https://docs.conda.io/en/latest/miniconda.html) for Linux.
 2. Install uiPSF package.
 - For TensorFlow 2.9
-      
+
   Follow the [installation for Windows](#Windows) to install the uiPSF package.
-  
+
 - For lastest TensorFlow (Note that TensorFlow later than 2.10 is no longer supported on Window)
-   
+
    a. Modify the version numbers in the *environment.yml* file as follows:
    ```
    - cudatoolkit=11.8
@@ -87,12 +91,12 @@ pip install -e .
    "tensorflow-probability"
    ```
    c. Follow the [installation for Windows](#Windows) to install the uiPSF package.
-     
+
    d. If the GPU version is intalled, run the following command
    ```
    pip install tensorflow[and-cuda]
    ```
-   We used above procedure to intall uiPSF on a Linux computer with RTX A6000 to fully utilize the computability from the GPU.    
+   We used above procedure to intall uiPSF on a Linux computer with RTX A6000 to fully utilize the computability from the GPU.
 3. If the GPU version is installed, add cudnn path
 ```
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
@@ -129,7 +133,7 @@ The following run times were obtained from a desktop PC with Windows 11, RTX 308
 |**2ch *in situ***|13.1 | 22,404|
 |**4pi *in situ***|35 | 35,189|
 |**FD *in situ***|49.7 | 143,023|
-# Example data 
+# Example data
 - 40 nm bead data from single-channel, dual-color ratiometric and 4Pi systems.
 - bead data from a single-channel system with a FOV of 177 um x 177 um.
 - bead data from a lattice-light sheet microscope.
@@ -151,21 +155,21 @@ Download the [example data](https://zenodo.org/doi/10.5281/zenodo.8267520)
     - In case there is no window popup, an alternative method is: install `Jupyter` from *Extensions*, then click *Select Kernel* at the upper right corner of the demo notebook and select the `psfinv` from the dropdown menu.
 9. Run subsequent cells sequentially.
 
-- For explanation of user defined parameters and details of creating config files, please refer to [user defined parameters](config/parameter%20description.md).     
+- For explanation of user defined parameters and details of creating config files, please refer to [user defined parameters](config/parameter%20description.md).
 - For explanation of the output parameters from PSF learning, please refer to [output parameters](demo/Description%20of%20output%20parameters.md).
 
 ## Input data format
-uiPSF normally assumes the input data are unprocessed raw data from the camera frames. Except for the 4Pi bead data, all data were saved as a 3D array: `[x, y, z]` for bead data or `[x, y, frames]` for SMLM data.  
-- `.mat` file should be save as Matlab version 7.3. 
+uiPSF normally assumes the input data are unprocessed raw data from the camera frames. Except for the 4Pi bead data, all data were saved as a 3D array: `[x, y, z]` for bead data or `[x, y, frames]` for SMLM data.
+- `.mat` file should be save as Matlab version 7.3.
 - `.tif` or `.tiff` file should be multi-page tiff file.
-### Single channel learning: 
+### Single channel learning:
 - File format: .czi, .tif, .tiff, .mat
 - Data dimension: 3D
 ### Multi-channel learning:
 - File format: .tif, .tiff, .mat
-- Data dimension: 
+- Data dimension:
   - For .tif file: 3D, all channels were collected from the same camera. uiPSF will crop the channels from the raw data based on user defined parameters (`mirrortype` and `channel_arrange`, see [user defined parameters](config/parameter%20description.md)).
-  - For .mat file: each channel is saved as a 3D array in the same file. 
+  - For .mat file: each channel is saved as a 3D array in the same file.
 ### 4Pi-PSF learning:
 - File format: .mat
 - Data dimension:
@@ -175,10 +179,10 @@ uiPSF normally assumes the input data are unprocessed raw data from the camera f
 - Please ensure that the computer's current graphics card driver supports CUDA 11.2.
 - Don't run two notebooks at the same time, click `Restart` at the top of the notebook to release the memory.
 - Although uiPSF usually process on raw data from camera frames, where it will select multiple candidate emitters, it can also take small data stack with only one emitter in it. However, in this case, the user need to set the `roi_size` to a value smaller than the FOV of the input data.
-- `roi_size` is normally a two-element vector, defining the crop size of one emitter in `[y, x]`. Only for agarose bead data, `roi_size` is a three-element vector, defining the crop size of one bead in `[z, y, x]`.  
+- `roi_size` is normally a two-element vector, defining the crop size of one emitter in `[y, x]`. Only for agarose bead data, `roi_size` is a three-element vector, defining the crop size of one bead in `[z, y, x]`.
 
 # Localization using SMAP and FD-DeepLoc
-Tutorials for using the PSF model generated from uiPSF for localization analysis. Use one of the [demo notebooks](#Demo-notebooks) to generate the corresponding PSF model (.h5 file) before using the following tutorials. 
+Tutorials for using the PSF model generated from uiPSF for localization analysis. Use one of the [demo notebooks](#Demo-notebooks) to generate the corresponding PSF model (.h5 file) before using the following tutorials.
 - [Single channel SMLM imaging](tutorial/tutorial%20for%20fit_fastsimple.pdf).
 - [Ratiometric dual-color SMLM imaging](tutorial/Tutorial%20for%20fit_global_dualchannel.pdf).
 - [4Pi-SMLM imaging](tutorial/tutorial%20fit_4pi.pdf)
