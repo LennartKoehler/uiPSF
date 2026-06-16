@@ -3,3 +3,4 @@ If only a specific subset of polynomials should be used for modeling they can be
 Zernike polynomials are specified by thier order. So e.g. if you want only Astigmatism and Spherical aberration you would specify zernike_ploynomials:[[2,2],[0,4]]
 
 ![Zernike Polynomials](assets/zernike_polynomials.jpg)
+Image from https://entokey.com/wavefront-aberrations-and-adaptive-optics-2/
