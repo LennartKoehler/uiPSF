@@ -71,7 +71,8 @@ class DefaultWriter(Writer):
             reporter = SilentReporter()
 
         reporter.begin_stage("6/6: saving results")
-        print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
+        print(self.format_zernike(param, learning_result))
+        # print("Zernike magnitude:", learning_result.zernike_magnitude, "Zernike phase:", learning_result.zernike_phase, "\n")
         os.makedirs(param.io.output_path, exist_ok=True)
         savename = os.path.join(param.io.output_path, param.model.psf_type)
         write_tiff(learning_result.psf_model_image, savename + ".tif")
@@ -79,6 +80,19 @@ class DefaultWriter(Writer):
 
         return "succcess"
 
+    def format_zernike(
+        self,
+        param: RunParameters,
+        learning_result: ZernikePSFResult
+    )-> str:
+
+        description = "\norder\tmagnitude\tphase\n"
+        for index, polynom in enumerate(param.model.psf.zernike_polynomials):
+            description += str(polynom) + ":\t"
+            description += str(learning_result.zernike_magnitude[index][0][0]) + "\t"
+            description += str(learning_result.zernike_phase[index][0][0]) + "\n"
+
+        return description
 
 
 class H5Writer(Writer):

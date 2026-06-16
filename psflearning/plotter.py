@@ -19,6 +19,9 @@ import numpy as np
 from typing import Tuple
 
 from .learning.loclib import LocalizationResult
+from .learning.psfs.IPSFModel import PupilField
+from .learning.psfs.PSFZernikeBased import ZernikePSFResult
+from psflearning.learning.data_representation.ImageData import ImageData
 from .writer import ROIsResult
 
 
@@ -51,9 +54,11 @@ class Plotter:
 
     def generate_report(
         self,
-        res,
-        rois: ROIsResult,
-        locres: LocalizationResult,
+        res: ZernikePSFResult,
+        rois: ImageData,
+        forward_images: np.ndarray,
+        pupil_field: PupilField,
+        locres: Optional[LocalizationResult],
         p,
         output_dir: str,
         index: int = 0,
@@ -66,20 +71,31 @@ class Plotter:
         pupil_paths = None
 
 
-        fig = self.plot_psf_vs_data(
-            rois.measured_roi_images, rois.modeled_roi_images,
-            pixel_size_z=pixel_size_z,
-            index=index,
+        fig = _psf_display(
+            rois.measured_roi_images[index],
+            pixel_size_z,
         )
 
-        psf_vs_data_paths = save_figs(fig, output_dir, "psf_vs_data", fmt, dpi)
+        bead = save_figs(fig, output_dir, "bead_1", fmt, dpi)
 
-        fig = self.plot_localization(locres.localized_positions, p.data.pixel_size)
+        fig = _psf_display(
+            rois.forward_images[index],
+            pixel_size_z,
+        )
+        bead_psf = save_figs(fig, output_dir, "bead_1_psf", fmt, dpi)
+
+        if locres:
+            fig = self.plot_localization(locres.positions, p.data.pixel_size)
         localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
+
+        zernike_coefficients = np.array([
+            np.squeeze(res.zernike_magnitude),
+            np.squeeze(res.zernike_phase),
+        ])
 
         try:
             fig_coeff, fig_pupil = self.plot_zernike(
-                res.zernike_coefficients, res.pupil, res.zernike_polynomial_basis,
+                zernike_coefficients, res.pupil, pupil_field.zernike_polynomial_basis,
             )
             zernike_paths = save_figs(fig_coeff, output_dir, "zernike", fmt, dpi)
             pupil_paths = save_figs(fig_pupil, output_dir, "pupil", fmt, dpi)
@@ -91,12 +107,12 @@ class Plotter:
                 logging.warning("no pupil / zernike plot available")
 
         fig = self.plot_learned_params(
-            roi_centers=rois.roi_centers, fitted_positions=res.fitted_positions, intensity=res.fitted_intensities,
-            bg=res.fitted_backgrounds, drift_rate=res.drift_rate,
+            roi_centers=rois.roi_centers, fitted_positions=res.positions, intensity=res.intensities,
+            bg=res.backgrounds, drift_rate=res.drift_xy,
         )
         learned_params_paths = save_figs(fig, output_dir, "learned_params", fmt, dpi)
 
-        fig = self.plot_coordinates(res.selected_roi_centers, res.all_roi_centers)
+        fig = self.plot_coordinates(rois.roi_centers, rois.roi_centers_all)
         coordinates_paths = save_figs(fig, output_dir, "coordinates", fmt, dpi)
 
 
@@ -110,7 +126,7 @@ class Plotter:
         bg: np.ndarray,
         drift_rate: np.ndarray,
     ) -> matplotlib.figure.Figure:
-        photon = intensity.transpose()
+        photon = np.squeeze(intensity).transpose()
 
         fig = plt.figure(figsize=[16, 8])
         spec = gridspec.GridSpec(
@@ -144,12 +160,12 @@ class Plotter:
         ax.set_ylabel("photon")
 
         ax = fig.add_subplot(spec[4])
-        ax.plot(bg)
+        ax.plot(np.squeeze(bg))
         ax.set_xlabel("bead number")
         ax.set_ylabel("background")
 
         ax = fig.add_subplot(spec[5])
-        ax.plot(drift_rate)
+        ax.plot(np.squeeze(drift_rate))
         ax.set_xlabel("bead number")
         ax.set_ylabel("drift per z slice (pixel)")
         ax.legend(["x", "y"])
@@ -191,20 +207,6 @@ class Plotter:
     ) -> matplotlib.figure.Figure:
         return _zernike_map(image_size, index, zmap, zcoeff, pupil, Zk)
 
-    # ── PSF vs data ──────────────────────────────────────────────────────
-
-    @staticmethod
-    def plot_psf_vs_data(
-        measured_images: np.ndarray,
-        modeled_images: np.ndarray,
-        pixel_size_z: float = 1.0,
-        index: int = 0,
-    ) -> Tuple[matplotlib.figure.Figure, matplotlib.figure.Figure]:
-        im1 = measured_images[index]
-        im2 = modeled_images[index]
-        fig1 = _psf_display(im1, pixel_size_z)
-        fig2 = _psf_display(im2, pixel_size_z)
-        return fig1, fig2
 
     # ── Localization ─────────────────────────────────────────────────────
 
@@ -215,14 +217,6 @@ class Plotter:
     ) -> matplotlib.figure.Figure:
         return _plot_loc_bias(loc, pixel_size)
 
-    # ── PSF display ──────────────────────────────────────────────────────
-
-    @staticmethod
-    def plot_psf(
-        psf_model_image: np.ndarray,
-        pixel_size_z: float = 1.0,
-    ) -> matplotlib.figure.Figure:
-        return _psf_display(psf_model_image, pixel_size_z)
 
     # ── Coordinates ──────────────────────────────────────────────────────
 

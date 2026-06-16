@@ -10,6 +10,9 @@ from psflearning.writer import H5Writer
 from psflearning import io
 from psflearning import Plotter
 
+import logging
+logging.basicConfig(filename='uiPSF.log', level=logging.DEBUG)
+
 main_data_dir = 'example_data_for_uiPSF'
 output_dir = 'test_output'
 
@@ -33,20 +36,20 @@ param.selection.roi.max_bead_number = 20
 param.selection.roi.bead_radius = 0.025
 param.runtime.batch_size = 30
 param.data.emission_wavelength = 0.6
-param.runtime.enable_relearning = True
+param.runtime.enable_relearning = False
 
 
 images = reader.read_images(param)
 # -- RUN --
 from psflearning.progress import TqdmProgressReporter
 reporter = TqdmProgressReporter()
-parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.run(param, images, reporter=reporter)
+psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
 # -- SAVE --
 
-resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, forward_images, reporter=reporter)
+resfile = writer.save_result(param, context.pupil_field, dataobj, learning_result, forward_images, reporter=reporter)
 
 # -- PLOT & SAVE --
 print('\nGenerating plots and saving to:', output_dir)
 plotter: Plotter = Plotter()
 
-saved = plotter.generate_report(learning_result, dataobj, learning_result, parameters, output_dir, index=1)
+saved = plotter.generate_report(learning_result, dataobj, forward_images, context.pupil_field, None, param, output_dir, index=1)

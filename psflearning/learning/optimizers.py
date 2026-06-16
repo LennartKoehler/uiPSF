@@ -77,7 +77,6 @@ class OptimizerABC:
         for step in range(self.maxiter):
             start = time.time()
             with tf.GradientTape() as tape:
-                # No tape.watch() needed — tf.Variables are automatically watched
                 loss = objective(variables)
             reporter.update(1, loss=loss)
             gradients = tape.gradient(loss, variablesTensor)
@@ -85,7 +84,7 @@ class OptimizerABC:
 
             self.update_history(step+1, time.time()-start, loss.numpy())
 
-        return variables  # Mutated in-place, no need to reconstruct
+        return variables
 
     def objective_wrapper_for_optimizer(self, variables):
         """

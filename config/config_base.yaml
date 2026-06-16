@@ -47,8 +47,8 @@ Params:
     psf:
       pupil_size: 64
       max_zernike_order: 8
-      # zernike_polynomials: [[1,1],[0,2],[2,2]]
-      extra_blur_sigma: 0.5
+      zernike_polynomials: [[0,0],[5,-5],[0,2],[1,1],[-1,1],[0,2],[2,2]]
+      extra_blur_sigma: 0.1
       include_apodization: true
       constant_pupil_magnitude: false
       radially_symmetric_magnitude: false
@@ -56,7 +56,7 @@ Params:
       initial_pupil_file_path: ""
       estimate_drift: false
       estimate_photon_variation: false
-      pixel_upsampling_factor: 2
+      pixel_upsampling_factor: 1
     loss_weight:
       mse_weight: 1
       modified_mse_weight: 1

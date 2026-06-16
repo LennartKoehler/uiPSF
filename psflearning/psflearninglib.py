@@ -77,7 +77,6 @@ class PSFLearningLib:
 
     @staticmethod
     def learn_with_localization(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
-        RunParameters,
         IPSFModel,
         ImageData,
         ZernikePSFResult,
@@ -94,15 +93,14 @@ class PSFLearningLib:
         if parameters.runtime.enable_relearning:
             psf_model, learning_result, loc_result, forward_images, context = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, reporter=reporter)
         else:
-            psf_model, learning_result, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
+            psf_model, learning_result, _, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
             loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, reporter=reporter)
 
-        return parameters, psf_model, dataobj, learning_result, forward_images, context, loc_result
+        return psf_model, dataobj, learning_result, forward_images, context, loc_result
 
 
     @staticmethod
     def learn(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
-        RunParameters,
         IPSFModel,
         ImageData,
         ZernikePSFResult,
@@ -118,14 +116,13 @@ class PSFLearningLib:
         if parameters.runtime.enable_relearning:
             psf_model, learning_result, forward_images, context = learn_psf_with_relearn(parameters, dataobj, psf_info, reporter=reporter)
         else:
-            psf_model, learning_result, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
+            psf_model, learning_result, _, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
 
-        return parameters, psf_model, dataobj, learning_result, forward_images, context
+        return psf_model, dataobj, learning_result, forward_images, context
 
 
     @staticmethod
     def run(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
-        RunParameters,
         IPSFModel,
         ImageData,
         ZernikePSFResult,
@@ -136,7 +133,7 @@ class PSFLearningLib:
         if parameters.runtime.enable_localization:
             return PSFLearningLib.learn_with_localization(parameters, images, reporter)
         else:
-            return PSFLearningLib.learn(parameters, images, reporter) + (None)
+            return PSFLearningLib.learn(parameters, images, reporter) + (None,)
 
     @staticmethod
     def _prep_data( param: Union[RunParameters, DictConfig], images: np.ndarray) -> ImageData:

@@ -1,9 +1,9 @@
 import sys
+import logging
 sys.path.append("../..")
 from psflearning.psflearninglib import PSFLearningLib
 from psflearning import Reader
 from psflearning.writer import DefaultWriter
-
 from psflearning import io
 
 main_data_dir = 'example_data_for_uiPSF'
@@ -15,6 +15,7 @@ reader = Reader()
 writer = DefaultWriter()
 
 
+logging.basicConfig(filename='uiPSF.log', level=logging.DEBUG)
 # -- SETUP --
 param = io.param.load_params(psftype='zernike', sysfile='M2')
 
@@ -39,8 +40,8 @@ images = reader.read_images(param)
 # -- RUN --
 from psflearning.progress import TqdmProgressReporter
 reporter = TqdmProgressReporter()
-parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
+psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
 # -- SAVE --
-parameters.io.output_path = output_dir
+param.io.output_path = output_dir
 
-resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, forward_images=forward_images, reporter=reporter)
+resfile = writer.save_result(param, context.pupil_field, dataobj, learning_result, forward_images=forward_images, reporter=reporter)
