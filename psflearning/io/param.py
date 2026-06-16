@@ -151,6 +151,7 @@ class RuntimeParams:
     batch_size: int = 1600
     max_iterations: int = 200
     enable_relearning: bool = True
+    enable_localization: bool = False
     plot_all_steps: bool = False
 
 

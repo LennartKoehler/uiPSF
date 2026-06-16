@@ -81,9 +81,9 @@ class PSFLearningLib:
         IPSFModel,
         ImageData,
         ZernikePSFResult,
-        LocalizationResult,
         np.ndarray,
-        PSFContext]:
+        PSFContext,
+        LocalizationResult]:
 
         if reporter is None:
             reporter = TqdmProgressReporter()
@@ -97,7 +97,7 @@ class PSFLearningLib:
             psf_model, learning_result, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
             loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, reporter=reporter)
 
-        return parameters, psf_model, dataobj, learning_result, loc_result, forward_images, context
+        return parameters, psf_model, dataobj, learning_result, forward_images, context, loc_result
 
 
     @staticmethod
@@ -123,6 +123,20 @@ class PSFLearningLib:
         return parameters, psf_model, dataobj, learning_result, forward_images, context
 
 
+    @staticmethod
+    def run(parameters: RunParameters, images: np.ndarray, reporter: Optional[ProgressReporter] = None) -> Tuple[
+        RunParameters,
+        IPSFModel,
+        ImageData,
+        ZernikePSFResult,
+        np.ndarray,
+        PSFContext,
+        Optional[LocalizationResult]]:
+
+        if parameters.runtime.enable_localization:
+            return PSFLearningLib.learn_with_localization(parameters, images, reporter)
+        else:
+            return PSFLearningLib.learn(parameters, images, reporter) + (None)
 
     @staticmethod
     def _prep_data( param: Union[RunParameters, DictConfig], images: np.ndarray) -> ImageData:

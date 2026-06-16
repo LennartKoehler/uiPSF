@@ -40,7 +40,7 @@ images = reader.read_images(param)
 # -- RUN --
 from psflearning.progress import TqdmProgressReporter
 reporter = TqdmProgressReporter()
-parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
+parameters, psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.run(param, images, reporter=reporter)
 # -- SAVE --
 
 resfile = writer.save_result(parameters, context.pupil_field, dataobj, learning_result, forward_images, reporter=reporter)
