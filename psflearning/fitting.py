@@ -200,15 +200,15 @@ def learn_psf_with_relearn_with_localization(
 
         # remove outliers
         mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
-        mask = mseRatio > threshold.mse
+        mask = mseRatio < threshold.mse
 
         intensityRatio = get_intensity_difference_ratio(fit_result.intensities)
-        mask = (intensityRatio > threshold.photon) & mask
+        mask = (intensityRatio < threshold.photon) & mask
 
         minI = get_minimum_intensity(fit_result.intensities)
         mask = (minI > 0) & mask
 
-        mask = (locres.mse_z_ratio > threshold.bias_z) & mask
+        mask = (locres.mse_z_ratio < threshold.bias_z) & mask
 
 
         result = filter_by_mask(

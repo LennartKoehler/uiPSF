@@ -10,6 +10,7 @@ from .. import imagetools as nip
 from .ImageData import ImageData
 
 
+# could implement a interface if images of different datatypes are ever used
 class PreprocessingPipeline:
     """
     Stateless pipeline that transforms raw images into an ImageData object.

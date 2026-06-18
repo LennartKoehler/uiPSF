@@ -77,9 +77,6 @@ List of all parameters defined in [config_base.yaml](config_base.yaml). Some par
 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**sampleheight** | *float*, `unit: micron`, height of the sample chamber between the two coverslips|
 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**var_sampleheight** | *bool*, options are `{true, false}`, `true` means estimate the sample height|
 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**phase_delay_dir** | *string*, options are `{'descend', 'ascend'}`, direction of the phase increment between the four channels|
-|&nbsp;&nbsp;&nbsp;**multi**| | 
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**defocus_offset** | *float*, `unit: micron`, defocus of the first channel in a MFM system|
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**defocus_delay** | *float*, `unit: micron`, defocus increment between the channels in a MFM system|
 |&nbsp;&nbsp;&nbsp;**model**| | 
 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**pupilsize** | *int*, pixel size of the pupil image|
 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**n_max** | *int*, maximum radial order of the Zernike polynomials used in modelling| 

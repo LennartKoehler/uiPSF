@@ -65,13 +65,7 @@ from .progress import ProgressReporter, TqdmProgressReporter
 class PSFLearningLib:
     """High-level PSF-learning workflow orchestrator.
 
-    Each public method delegates to the corresponding sub-module so that
-    the sub-modules can also be used directly without instantiating this
-    class.  ``param`` is always passed explicitly – the orchestrator is
-    stateless with respect to experiment configuration.
-
-    The :attr:`plotter` property exposes the :class:`Plotter` instance
-    for direct access to visualisation methods.
+    Run the psf learning just as default, or tun with relearn (after removing outliers) or run with localization
     """
 
 

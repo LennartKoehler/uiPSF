@@ -10,7 +10,7 @@ All rights reserved     Heintzmann Lab, Friedrich-Schiller-University Jena, Germ
 import tensorflow as tf
 import numpy as np
 import scipy as sp
-from math import factorial 
+from math import factorial
 from . import imagetools as nip
 import numbers
 from scipy import ndimage
@@ -52,7 +52,7 @@ def psf2cspline_np(psf: np.ndarray) -> np.ndarray:
                     for m in range(1, 5):
                         for n in range(1, 5):
                             A[(i-1)*16+(j-1)*4+k - 1, (l-1)*16+(m-1)*4+n - 1] = dx**(l-1) * dy**(m-1) * dz**(n-1)
-    
+
     # upsample psf with factor of 3
     psf_up = ndimage.zoom(psf, 3.0, mode='grid-constant', grid_mode=True)[1:-1, 1:-1, 1:-1]
     A = np.float32(A)
@@ -80,7 +80,7 @@ def nl2noll(n: int, l: int) -> np.int32:
     j = n * (n + 1) / 2 + 1 + max(0, mm - 1)
     if ((l > 0) & (np.mod(n, 4) >= 2)) | ((l < 0) & (np.mod(n, 4) <= 1)):
        j = j + 1
-    
+
     return np.int32(j)
 
 def noll2nl(j: int) -> tuple[np.int32, np.int32]:
@@ -89,10 +89,10 @@ def noll2nl(j: int) -> tuple[np.int32, np.int32]:
     l = j - n * (n + 1) / 2 - 1
     if np.mod(n, 2) != np.mod(l, 2):
        l = l + 1
-    
+
     if np.mod(j, 2) == 1:
        l= -l
-    
+
     return np.int32(n),np.int32(l)
 
 def radialpoly(n: int, m: int, rho: np.ndarray) -> np.ndarray:
@@ -109,28 +109,17 @@ def radialpoly(n: int, m: int, rho: np.ndarray) -> np.ndarray:
 
     return r
 
-def genZern1(n_max: int, xsz: int) -> np.ndarray:
+def gen_zernike_polynomials(n_max: int, xsz: int) -> np.ndarray:
     """Generate Zernike polynomials up to radial order n_max on an xsz x xsz grid."""
     Nk = (n_max+1)*(n_max+2)//2
-    Z = np.ones((Nk,xsz,xsz))
-    pkx = 2/xsz
-    xrange = np.linspace(-xsz/2+0.5,xsz/2-0.5,xsz)
-    [xx,yy] = np.meshgrid(xrange,xrange)
-    rho = np.lib.scimath.sqrt((xx*pkx)**2+(yy*pkx)**2)
-    phi = np.arctan2(yy,xx)
 
+    zernike_selection = []
     for j in range(0,Nk):
-        [n,l] = noll2nl(j+1)
-        m = np.abs(l)
-        r = radialpoly(n,m,rho)
-        if l<0:
-            Z[j] = r*np.sin(phi*m)
-        else:
-            Z[j] = r*np.cos(phi*m)
-    return Z
+        zernike_selection.append(noll2nl(j+1))
+    return gen_zernike_polynomials_from_selection(zernike_selection, xsz)
 
 
-def genZern1_selected(nm_pairs: list[tuple[int, int] | list[int]], xsz: int) -> np.ndarray:
+def gen_zernike_polynomials_from_selection(nm_pairs: list[tuple[int, int] | list[int]], xsz: int) -> np.ndarray:
     """Generate specific Zernike polynomials identified by (n, m) pairs on an xsz x xsz grid.
 
     Parameters

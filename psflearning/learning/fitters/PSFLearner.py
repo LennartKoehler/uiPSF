@@ -128,6 +128,7 @@ def filter_by_mask(
 
 
 
+# difference between a preprocessed bead and that bead modeled using the psf (forward image)
 def get_MSE_difference_ratio(
     modeled_forward_images: np.ndarray,
     measured_bead_images: np.ndarray
@@ -164,12 +165,13 @@ def get_intensity_difference_ratio(
 
     absolute_intensities = np.abs(np.squeeze(intensities, axis=(-1, -2)))
     if len(absolute_intensities.shape) < 2:
-        avgI = absolute_intensities
+        average_intensity_per_bead = absolute_intensities
     else:
-        avgI = np.median(absolute_intensities, axis=1)
+        average_intensity_per_bead = np.median(absolute_intensities, axis=1)
 
     if absolute_intensities.shape[0] == 1:
         intRatio = np.array([1.0])
     else:
-        intRatio = np.square(avgI - np.median(avgI)) / np.median(avgI) / avgI
+        median_intensity_of_all_beads = np.median(average_intensity_per_bead)
+        intRatio = np.square(average_intensity_per_bead - median_intensity_of_all_beads) / (median_intensity_of_all_beads * average_intensity_per_bead)
     return intRatio

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -45,7 +45,6 @@ class PSFContext:
     bead_kernel: tf.Tensor
     optimization_weights: OptimizationWeights
     initial_pupil: Optional[np.ndarray] = None
-    defocus: Any = field(default_factory=lambda: np.float32(0))
     psf_type: str = 'scalar'
     max_magnitude_order: int = 100
 
@@ -93,13 +92,12 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         self,
         pos: tf.Tensor,
         z_range,
-        defocus,
         frequency_x,
         frequency_y,
         frequency_z,
         frequency_z_medium):
 
-        phiz = -1j * 2 * np.pi * frequency_z * (pos[:, 0] + z_range + defocus)
+        phiz = -1j * 2 * np.pi * frequency_z * (pos[:, 0] + z_range)
         if int(pos.shape[1]) > 3:
             phixy = 1j * 2 * np.pi * frequency_y * pos[:, 2] + 1j * 2 * np.pi * frequency_x * pos[:, 3]
             phiz = 1j * 2 * np.pi * (frequency_z_medium * pos[:, 1] - frequency_z * (pos[:, 0] + z_range))

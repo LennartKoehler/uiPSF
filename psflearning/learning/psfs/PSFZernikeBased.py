@@ -256,7 +256,6 @@ class PSFZernikeBased(PSFZernikeBase):
             bead_kernel=bead_kernel,
             optimization_weights=optimization_weights,
             initial_pupil=initial_pupil,
-            defocus=np.float32(0),
             psf_type=psf_type,
             max_magnitude_order=max_magnitude_order,
         )
@@ -317,7 +316,6 @@ class PSFZernikeBased(PSFZernikeBase):
         phase_z, phase_xy = self._compute_phase(
             positions,
             pf.z_range,
-            context.defocus,
             pf.frequency_x,
             pf.frequency_y,
             pf.frequency_z,
@@ -363,7 +361,7 @@ class PSFZernikeBased(PSFZernikeBase):
             pupil_phase = tf.reduce_sum(pf.zernike_polynomial_basis * Zcoeff_phase, axis=0)
             pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase, context)
 
-        phiz = -1j * 2 * np.pi * pf.frequency_z * (pf.z_range + context.defocus)
+        phiz = -1j * 2 * np.pi * pf.frequency_z * pf.z_range
         phase_z = tf.exp(phiz)
 
         psf_model_image = self._render_psf(pupil, phase_z, sigma, context, use_bead_kernel=addbead)

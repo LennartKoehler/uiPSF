@@ -16,7 +16,7 @@ logging.basicConfig(filename='uiPSF.log', level=logging.DEBUG)
 main_data_dir = 'example_data_for_uiPSF'
 output_dir = 'test_output'
 
-param = io.param.load_params(psftype='zernike', sysfile='M2')
+param = io.param.load_params(psftype='zernike', userfile='config_user',sysfile='M2')
 
 reader = Reader()
 writer = H5Writer()

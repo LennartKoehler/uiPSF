@@ -9,6 +9,7 @@ from psflearning import io
 main_data_dir = 'example_data_for_uiPSF'
 output_dir = 'test_output'
 
+
 param = io.param.load_params(psftype='zernike', sysfile='M2')
 
 reader = Reader()
@@ -17,7 +18,7 @@ writer = DefaultWriter()
 
 logging.basicConfig(filename='uiPSF.log', level=logging.DEBUG)
 # -- SETUP --
-param = io.param.load_params(psftype='zernike', sysfile='M2')
+param = io.param.load_params(userfile='config_user', psftype='zernike', sysfile='M2')
 
 # --- overwrite some params ---
 param.io.data_path = main_data_dir+'/1ch_40nm_bead'

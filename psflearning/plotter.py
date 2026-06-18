@@ -79,7 +79,7 @@ class Plotter:
         bead = save_figs(fig, output_dir, "bead_1", fmt, dpi)
 
         fig = _psf_display(
-            rois.forward_images[index],
+            forward_images[index],
             pixel_size_z,
         )
         bead_psf = save_figs(fig, output_dir, "bead_1_psf", fmt, dpi)
