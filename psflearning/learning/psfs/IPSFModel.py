@@ -129,6 +129,29 @@ class PupilField:
     frequency_squared_y: Any
 
 
+@dataclass
+class PupilGeometry:
+    """Intermediate optical quantities derived from pupil coordinates.
+
+    Produced by :meth:`IPSFModel._compute_pupil_geometry` and consumed by
+    the dipole-field, apodization, and defocus-frequency subfunctions.
+    """
+
+    radial_coordinate: Any
+    kz_immersion: Any
+    kz_medium: Any
+    cos_immersion: Any
+    cos_medium: Any
+    cos_coverslip: Any
+    transmission_p: Any
+    transmission_s: Any
+    transmission_avg: Any
+    azimuthal_angle: Any
+    sin_medium: Any
+    pupil_x: Any
+    pupil_y: Any
+
+
 class IPSFModel(ABC):
     """
     Interface that ensures consistency and compatability between all old and new implementations of data classes, fitters and psfs.
@@ -164,104 +187,61 @@ class IPSFModel(ABC):
             PupilField with all precomputed optical quantities.
         """
         pixel_upsampling_factor = params.model.psf.pixel_upsampling_factor
-        Lx = data.measured_roi_images.shape[-1]*pixel_upsampling_factor
-        # Ly = data.measured_roi_images.shape[-2]*pixel_upsampling_factor
-        # Lz = data.measured_roi_images.shape[-3]
-        xsz = params.model.psf.pupil_size
-
-        xrange = np.linspace(-Lx/2+0.5, Lx/2-0.5, Lx)
-        [xx,yy] = np.meshgrid(xrange,xrange)
-        pkx = xx/Lx
-        frequency_squared_x = np.float32(pkx*pkx)
-        pky = yy/Lx
-        frequency_squared_y = np.float32(pky*pky)
-
-        pixelsize_x = data.pixelsize_x/pixel_upsampling_factor
-        pixelsize_y = data.pixelsize_y/pixel_upsampling_factor
+        pupil_size = params.model.psf.pupil_size
         NA = params.data.numerical_aperture
-        emission_wavelength = params.data.emission_wavelength
-        nimm = params.data.refractive_indices.immersion
-        nmed = params.data.refractive_indices.medium
-        ncov = params.data.refractive_indices.coverslip
-        n_max = params.model.psf.max_zernike_order
-        zernike_polys = params.model.psf.zernike_polynomials
-        if zernike_polys:
-            Zk = im.genZern1_selected(zernike_polys, xsz)
-            spherical_noll_indices = np.array([], dtype=np.int32)
-        else:
-            Zk = im.genZern1(n_max,xsz)
-            n1 = np.array(range(-1,n_max,2))
-            spherical_noll_indices = (n1+1)*(n1+2)//2
+        wavelength = params.data.emission_wavelength
+        n_immersion = params.data.refractive_indices.immersion
+        n_medium = params.data.refractive_indices.medium
+        n_coverslip = params.data.refractive_indices.coverslip
 
-        pupilradius = 1
-        krange = np.linspace(-pupilradius+pupilradius/xsz, pupilradius-pupilradius/xsz, xsz)
-        [xx,yy] = np.meshgrid(krange,krange)
-        kr = np.lib.scimath.sqrt(xx**2+yy**2)
-        kz = np.lib.scimath.sqrt((nimm/emission_wavelength)**2-(kr*NA/emission_wavelength)**2)
+        roi_shape = data.measured_roi_images.shape
+        roi_depth, roi_height, roi_width = roi_shape[-3], roi_shape[-2], roi_shape[-1]
+        image_size = roi_width * pixel_upsampling_factor
 
-        cos_imm = np.lib.scimath.sqrt(1-(kr*NA/nimm)**2)
-        cos_med = np.lib.scimath.sqrt(1-(kr*NA/nmed)**2)
-        cos_cov = np.lib.scimath.sqrt(1-(kr*NA/ncov)**2)
-        kz_med = nmed/emission_wavelength*cos_med
-        FresnelPmedcov = 2*nmed*cos_med/(nmed*cos_cov+ncov*cos_med)
-        FresnelSmedcov = 2*nmed*cos_med/(nmed*cos_med+ncov*cos_cov)
-        FresnelPcovimm = 2*ncov*cos_cov/(ncov*cos_imm+nimm*cos_cov)
-        FresnelScovimm = 2*ncov*cos_cov/(ncov*cos_cov+nimm*cos_imm)
-        Tp = FresnelPmedcov*FresnelPcovimm
-        Ts = FresnelSmedcov*FresnelScovimm
-        Tavg = (Tp+Ts)/2
+        pixelsize_x = data.pixelsize_x / pixel_upsampling_factor
+        pixelsize_y = data.pixelsize_y / pixel_upsampling_factor
+        pixelsize_z = data.pixelsize_z
 
-        phi = np.arctan2(yy,xx)
-        cos_phi = np.cos(phi)
-        sin_phi = np.sin(phi)
-        sin_med = kr*NA/nmed
+        frequency_squared_x, frequency_squared_y = IPSFModel._compute_image_frequency_grid(image_size)
 
-        pvec = Tp*np.stack([cos_med*cos_phi,cos_med*sin_phi,-sin_med])
-        svec = Ts*np.stack([-sin_phi,cos_phi,np.zeros(cos_phi.shape)])
+        zernike_basis, spherical_noll_indices = IPSFModel._compute_zernike_basis(
+            params.model.psf.max_zernike_order,
+            params.model.psf.zernike_polynomials,
+            pupil_size,
+        )
 
-        hx = cos_phi*pvec-sin_phi*svec
-        hy = sin_phi*pvec+cos_phi*svec
-        h = np.concatenate((hx,hy),axis=0)
-        dipole_field = np.complex64(h)
-        if params.model.psf.include_apodization:
-            apoid = np.lib.scimath.sqrt(cos_imm)/cos_med
-            if psf_type=='scalar':
-                apoid=apoid*Tavg
-        else:
-            apoid = 1
+        geometry = IPSFModel._compute_pupil_geometry(
+            pupil_size, NA, wavelength, n_immersion, n_medium, n_coverslip,
+        )
 
-        kpixelsize = 2.0*NA/emission_wavelength/xsz
-        czt_parameters = im.prechirpz1(kpixelsize,pixelsize_x,pixelsize_y,xsz,Lx)
+        dipole_field = IPSFModel._compute_dipole_field(geometry)
 
-        pupil_mask = np.complex64(kr<1)
-        pupil = pupil_mask*apoid
-        pupil = tf.cast(pupil,tf.complex64)
-        if psf_type=='scalar':
-            propagated_psf_amplitude = im.cztfunc1(pupil,czt_parameters)
-            normalization_factor = np.complex64(1/np.sum(propagated_psf_amplitude*np.conj(propagated_psf_amplitude)))
-        else:
-            I_res = 0.0
-            for h in dipole_field:
-                PupilFunction = pupil*h
-                propagated_psf_amplitude = im.cztfunc1(PupilFunction,czt_parameters)
-                I_res += propagated_psf_amplitude*tf.math.conj(propagated_psf_amplitude)
-            normalization_factor = np.complex64(1/np.sum(I_res))
-        z_range = np.linspace(-Nz/2+0.5,Nz/2-0.5,Nz,dtype=np.complex64).reshape((Nz,1,1))
-        frequency_x = np.complex64(xx*NA/emission_wavelength)*pixelsize_x
-        frequency_y = np.complex64(yy*NA/emission_wavelength)*pixelsize_y
-        frequency_z = np.complex64(kz)*data.pixelsize_z
-        frequency_z_medium = np.complex64(kz_med)*data.pixelsize_z
-        apodization = np.complex64(apoid)
-        zernike_polynomial_basis = np.float32(Zk)
+        apodization = IPSFModel._compute_apodization(
+            geometry, psf_type, params.model.psf.include_apodization,
+        )
 
-        Lx_roi = data.measured_roi_images.shape[-1]
-        Ly_roi = data.measured_roi_images.shape[-2]
-        Lz_roi = data.measured_roi_images.shape[-3]
+        czt_parameters = IPSFModel._compute_czt_parameters(
+            NA, wavelength, pupil_size, pixelsize_x, pixelsize_y, image_size,
+        )
 
-        z_positions = np.linspace(0, Lz_roi-1, Lz_roi, dtype=np.float32).reshape(Lz_roi,1,1) - Lz_roi/2
-        frequency_x_view = np.linspace(-Lx_roi/2+0.5, Lx_roi/2-0.5, Lx_roi, dtype=np.float32)/Lx_roi
-        frequency_y_view = (np.linspace(-Ly_roi/2+0.5, Ly_roi/2-0.5, Ly_roi, dtype=np.float32).reshape(Ly_roi,1))/Ly_roi
-        frequency_z_view = (np.linspace(-Lz_roi/2+0.5, Lz_roi/2-0.5, Lz_roi, dtype=np.float32).reshape(Lz_roi,1,1))/Lz_roi
+        pupil_mask = np.complex64(geometry.radial_coordinate < 1)
+        normalization_factor = IPSFModel._compute_normalization(
+            pupil_mask, apodization, dipole_field, czt_parameters, psf_type,
+        )
+
+        frequency_x, frequency_y, frequency_z, frequency_z_medium = (
+            IPSFModel._compute_defocus_frequencies(
+                geometry, NA, wavelength, pixelsize_x, pixelsize_y, pixelsize_z,
+            )
+        )
+
+        z_positions, frequency_x_view, frequency_y_view, frequency_z_view = (
+            IPSFModel._compute_view_grids(roi_width, roi_height, roi_depth)
+        )
+
+        z_range = np.linspace(
+            -Nz / 2 + 0.5, Nz / 2 - 0.5, Nz, dtype=np.complex64,
+        ).reshape((Nz, 1, 1))
 
         return PupilField(
             pupil_mask=pupil_mask,
@@ -273,7 +253,7 @@ class IPSFModel(ABC):
             frequency_y=frequency_y,
             frequency_z=frequency_z,
             frequency_z_medium=frequency_z_medium,
-            zernike_polynomial_basis=zernike_polynomial_basis,
+            zernike_polynomial_basis=zernike_basis,
             spherical_noll_indices=spherical_noll_indices,
             dipole_field=dipole_field,
             z_positions=z_positions,
@@ -284,12 +264,208 @@ class IPSFModel(ABC):
             frequency_squared_y=frequency_squared_y,
         )
 
+    @staticmethod
+    def _compute_image_frequency_grid(image_size: int) -> tuple[np.ndarray, np.ndarray]:
+        coord_range = np.linspace(-image_size / 2 + 0.5, image_size / 2 - 0.5, image_size)
+        grid_x, grid_y = np.meshgrid(coord_range, coord_range)
+        freq_x = grid_x / image_size
+        freq_y = grid_y / image_size
+        return np.float32(freq_x * freq_x), np.float32(freq_y * freq_y)
+
+    @staticmethod
+    def _compute_zernike_basis(
+        max_zernike_order: int,
+        zernike_polynomials: list,
+        pupil_size: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if zernike_polynomials:
+            basis = im.gen_zernike_polynomials_from_selection(zernike_polynomials, pupil_size)
+            spherical_noll_indices = np.array([], dtype=np.int32)
+        else:
+            basis = im.gen_zernike_polynomials(max_zernike_order, pupil_size)
+            odd_radial_orders = np.array(range(-1, max_zernike_order, 2))
+            spherical_noll_indices = (odd_radial_orders + 1) * (odd_radial_orders + 2) // 2
+        return np.float32(basis), spherical_noll_indices
+
+    @staticmethod
+    def _compute_pupil_geometry(
+        pupil_size: int,
+        NA: float,
+        wavelength: float,
+        n_immersion: float,
+        n_medium: float,
+        n_coverslip: float,
+    ) -> PupilGeometry:
+        pupil_edge = 1.0
+        krange = np.linspace(
+            -pupil_edge + pupil_edge / pupil_size,
+            pupil_edge - pupil_edge / pupil_size,
+            pupil_size,
+        )
+        pupil_x, pupil_y = np.meshgrid(krange, krange)
+
+        radial_coordinate = np.lib.scimath.sqrt(pupil_x ** 2 + pupil_y ** 2)
+        kz_immersion = np.lib.scimath.sqrt(
+            (n_immersion / wavelength) ** 2 - (radial_coordinate * NA / wavelength) ** 2
+        )
+
+        cos_immersion = np.lib.scimath.sqrt(1 - (radial_coordinate * NA / n_immersion) ** 2)
+        cos_medium = np.lib.scimath.sqrt(1 - (radial_coordinate * NA / n_medium) ** 2)
+        cos_coverslip = np.lib.scimath.sqrt(1 - (radial_coordinate * NA / n_coverslip) ** 2)
+        kz_medium = n_medium / wavelength * cos_medium
+
+        fresnel_p_medium_to_coverslip = (
+            2 * n_medium * cos_medium / (n_medium * cos_coverslip + n_coverslip * cos_medium)
+        )
+        fresnel_s_medium_to_coverslip = (
+            2 * n_medium * cos_medium / (n_medium * cos_medium + n_coverslip * cos_coverslip)
+        )
+        fresnel_p_coverslip_to_immersion = (
+            2 * n_coverslip * cos_coverslip
+            / (n_coverslip * cos_immersion + n_immersion * cos_coverslip)
+        )
+        fresnel_s_coverslip_to_immersion = (
+            2 * n_coverslip * cos_coverslip
+            / (n_coverslip * cos_coverslip + n_immersion * cos_immersion)
+        )
+
+        transmission_p = fresnel_p_medium_to_coverslip * fresnel_p_coverslip_to_immersion
+        transmission_s = fresnel_s_medium_to_coverslip * fresnel_s_coverslip_to_immersion
+        transmission_avg = (transmission_p + transmission_s) / 2
+
+        azimuthal_angle = np.arctan2(pupil_y, pupil_x)
+        sin_medium = radial_coordinate * NA / n_medium
+
+        return PupilGeometry(
+            radial_coordinate=radial_coordinate,
+            kz_immersion=kz_immersion,
+            kz_medium=kz_medium,
+            cos_immersion=cos_immersion,
+            cos_medium=cos_medium,
+            cos_coverslip=cos_coverslip,
+            transmission_p=transmission_p,
+            transmission_s=transmission_s,
+            transmission_avg=transmission_avg,
+            azimuthal_angle=azimuthal_angle,
+            sin_medium=sin_medium,
+            pupil_x=pupil_x,
+            pupil_y=pupil_y,
+        )
+
+    @staticmethod
+    def _compute_dipole_field(geometry: PupilGeometry) -> np.ndarray:
+        cos_phi = np.cos(geometry.azimuthal_angle)
+        sin_phi = np.sin(geometry.azimuthal_angle)
+
+        p_pol_vector = geometry.transmission_p * np.stack([
+            geometry.cos_medium * cos_phi,
+            geometry.cos_medium * sin_phi,
+            -geometry.sin_medium,
+        ])
+        s_pol_vector = geometry.transmission_s * np.stack([
+            -sin_phi,
+            cos_phi,
+            np.zeros(cos_phi.shape),
+        ])
+
+        dipole_field_x = cos_phi * p_pol_vector - sin_phi * s_pol_vector
+        dipole_field_y = sin_phi * p_pol_vector + cos_phi * s_pol_vector
+        dipole_field = np.concatenate((dipole_field_x, dipole_field_y), axis=0)
+        return np.complex64(dipole_field)
+
+    @staticmethod
+    def _compute_apodization(
+        geometry: PupilGeometry,
+        psf_type: str,
+        include_apodization: bool,
+    ) -> Any:
+        if not include_apodization:
+            return np.complex64(1.0)
+        apodization = np.lib.scimath.sqrt(geometry.cos_immersion) / geometry.cos_medium
+        if psf_type == 'scalar':
+            apodization = apodization * geometry.transmission_avg
+        return np.complex64(apodization)
+
+    @staticmethod
+    def _compute_czt_parameters(
+        NA: float,
+        wavelength: float,
+        pupil_size: int,
+        pixelsize_x: float,
+        pixelsize_y: float,
+        image_size: int,
+    ) -> tuple:
+        pupil_freq_pixel_size = 2.0 * NA / wavelength / pupil_size
+        return im.prechirpz1(
+            pupil_freq_pixel_size, pixelsize_x, pixelsize_y, pupil_size, image_size,
+        )
+
+    @staticmethod
+    def _compute_normalization(
+        pupil_mask: np.ndarray,
+        apodization: Any,
+        dipole_field: np.ndarray,
+        czt_parameters: tuple,
+        psf_type: str,
+    ) -> np.complex64:
+        pupil = tf.cast(pupil_mask * apodization, tf.complex64)
+        if psf_type == 'scalar':
+            propagated = im.cztfunc1(pupil, czt_parameters)
+            intensity = propagated * np.conj(propagated)
+            return np.complex64(1.0 / np.sum(intensity))
+        I_total = 0.0
+        for h in dipole_field:
+            pupil_function = pupil * h
+            propagated = im.cztfunc1(pupil_function, czt_parameters)
+            I_total += propagated * tf.math.conj(propagated)
+        return np.complex64(1.0 / np.sum(I_total))
+
+    @staticmethod
+    def _compute_defocus_frequencies(
+        geometry: PupilGeometry,
+        NA: float,
+        wavelength: float,
+        pixelsize_x: float,
+        pixelsize_y: float,
+        pixelsize_z: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        frequency_x = np.complex64(geometry.pupil_x * NA / wavelength) * pixelsize_x
+        frequency_y = np.complex64(geometry.pupil_y * NA / wavelength) * pixelsize_y
+        frequency_z = np.complex64(geometry.kz_immersion) * pixelsize_z
+        frequency_z_medium = np.complex64(geometry.kz_medium) * pixelsize_z
+        return frequency_x, frequency_y, frequency_z, frequency_z_medium
+
+    @staticmethod
+    def _compute_view_grids(
+        roi_width: int,
+        roi_height: int,
+        roi_depth: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        z_positions = (
+            np.linspace(0, roi_depth - 1, roi_depth, dtype=np.float32)
+            .reshape(roi_depth, 1, 1)
+            - roi_depth / 2
+        )
+        frequency_x_view = (
+            np.linspace(-roi_width / 2 + 0.5, roi_width / 2 - 0.5, roi_width, dtype=np.float32)
+            / roi_width
+        )
+        frequency_y_view = (
+            np.linspace(-roi_height / 2 + 0.5, roi_height / 2 - 0.5, roi_height, dtype=np.float32)
+            .reshape(roi_height, 1)
+            / roi_height
+        )
+        frequency_z_view = (
+            np.linspace(-roi_depth / 2 + 0.5, roi_depth / 2 - 0.5, roi_depth, dtype=np.float32)
+            .reshape(roi_depth, 1, 1)
+            / roi_depth
+        )
+        return z_positions, frequency_x_view, frequency_y_view, frequency_z_view
+
 
     @staticmethod
     def gen_bead_kernel(data: ImageData, params: RunParameters, isVolume: bool = False) -> tf.Tensor:
         """Generate a bead kernel for convolution with the PSF model.
-
-        Pure function — no side effects.
         """
         pixelsize_z = data.pixelsize_z
         bead_radius = data.bead_radius
