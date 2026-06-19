@@ -212,11 +212,6 @@ class PSFZernikeBased(PSFZernikeBase):
         Nz = bead_kernel.shape[0]
         pupil_field = self.compute_pupil_field(data, params, psf_type, Nz=Nz)
 
-        if params.model.psf.constant_pupil_magnitude:
-            max_magnitude_order = 0
-        else:
-            max_magnitude_order = 100
-
         init_backgrounds[init_backgrounds < 0.1] = 0.1
         bg_median = np.median(init_backgrounds)
         weight_intensity = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -231,8 +226,8 @@ class PSFZernikeBased(PSFZernikeBase):
 
         sigma = np.ones((2,)) * params.model.psf.extra_blur_sigma * np.pi
 
-        init_zernike_coeff_magnitude = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
-        init_zernike_coeff_phase = np.zeros((pupil_field.zernike_polynomial_basis.shape[0], 1, 1))
+        init_zernike_coeff_magnitude = np.zeros((pupil_field.zernike_magnitude_indices.shape[0], 1, 1))
+        init_zernike_coeff_phase = np.zeros((pupil_field.zernike_phase_indices.shape[0], 1, 1))
 
         init_zernike_coeff_magnitude[0, 0, 0] = 1 / optimization_weights.zernike_magnitude
 
@@ -257,7 +252,6 @@ class PSFZernikeBased(PSFZernikeBase):
             optimization_weights=optimization_weights,
             initial_pupil=initial_pupil,
             psf_type=psf_type,
-            max_magnitude_order=max_magnitude_order,
         )
 
         return ZernikePSFVariables(
@@ -356,10 +350,7 @@ class PSFZernikeBased(PSFZernikeBase):
         """
         pf = context.pupil_field
         if pupil is None:
-            pupil_mag = tf.reduce_sum(pf.zernike_polynomial_basis * Zcoeff_magnitude, axis=0)
-            pupil_mag = tf.math.maximum(pupil_mag, 0)
-            pupil_phase = tf.reduce_sum(pf.zernike_polynomial_basis * Zcoeff_phase, axis=0)
-            pupil = self.magnitude_phase_to_pupil(pupil_mag, pupil_phase, context)
+            pupil = self.compute_pupil_from_zernike(Zcoeff_magnitude, Zcoeff_phase, weight_mag=1, weight_phase=1, context=context) # assumes the Zcoeff are already multiplied with weight
 
         phiz = -1j * 2 * np.pi * pf.frequency_z * pf.z_range
         phase_z = tf.exp(phiz)

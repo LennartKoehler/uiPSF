@@ -5,4 +5,4 @@ Params:
     output_path: ""
   model:
     psf:
-      zernike_polynomials: [[0,0],[5,-5],[0,2],[1,1],[-1,1],[0,2],[2,2]]
+      # zernike_polynomials: [[0,0],[5,-5],[0,2],[1,1],[-1,1],[0,2],[2,2]]

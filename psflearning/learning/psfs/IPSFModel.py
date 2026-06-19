@@ -6,11 +6,11 @@ from dataclasses import dataclass
 import numpy as np
 import tensorflow as tf
 import scipy.special as spf
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from ..data_representation.ImageData import ImageData
-from psflearning.io.param import RunParameters
-from .. import utilities as im
+from psflearning.io.param import RunParameters, PSFModelParams
+from .. import utilities as utils
 from enum import Enum
 
 class ParameterScope(Enum):
@@ -119,7 +119,10 @@ class PupilField:
     frequency_z: Any
     frequency_z_medium: Any
     zernike_polynomial_basis: Any
-    spherical_noll_indices: Any
+
+    zernike_magnitude_indices: np.ndarray
+    zernike_phase_indices: np.ndarray
+
     dipole_field: Any
     z_positions: Any
     frequency_x_view: Any
@@ -204,9 +207,8 @@ class IPSFModel(ABC):
 
         frequency_squared_x, frequency_squared_y = IPSFModel._compute_image_frequency_grid(image_size)
 
-        zernike_basis, spherical_noll_indices = IPSFModel._compute_zernike_basis(
-            params.model.psf.max_zernike_order,
-            params.model.psf.zernike_polynomials,
+        zernike_basis, zernike_magnitude_indices, zernike_phase_indices = IPSFModel._compute_zernike_basis(
+            params.model.psf,
             pupil_size,
         )
 
@@ -254,7 +256,8 @@ class IPSFModel(ABC):
             frequency_z=frequency_z,
             frequency_z_medium=frequency_z_medium,
             zernike_polynomial_basis=zernike_basis,
-            spherical_noll_indices=spherical_noll_indices,
+            zernike_magnitude_indices=zernike_magnitude_indices,
+            zernike_phase_indices=zernike_phase_indices,
             dipole_field=dipole_field,
             z_positions=z_positions,
             frequency_x_view=frequency_x_view,
@@ -274,18 +277,28 @@ class IPSFModel(ABC):
 
     @staticmethod
     def _compute_zernike_basis(
-        max_zernike_order: int,
-        zernike_polynomials: list,
+        psf_model_parameters: PSFModelParams,
         pupil_size: int,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        if zernike_polynomials:
-            basis = im.gen_zernike_polynomials_from_selection(zernike_polynomials, pupil_size)
-            spherical_noll_indices = np.array([], dtype=np.int32)
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+        zernike_indices = psf_model_parameters.zernike_polynomials
+
+        if psf_model_parameters.zernike_polynomials:
+            basis = utils.gen_zernike_polynomials_from_selection(psf_model_parameters.zernike_polynomials, pupil_size)
+            zernike_phase_indices = np.arange(basis.shape[0])
+
         else:
-            basis = im.gen_zernike_polynomials(max_zernike_order, pupil_size)
-            odd_radial_orders = np.array(range(-1, max_zernike_order, 2))
-            spherical_noll_indices = (odd_radial_orders + 1) * (odd_radial_orders + 2) // 2
-        return np.float32(basis), spherical_noll_indices
+            basis, zernike_indices = utils.gen_zernike_polynomials(psf_model_parameters.max_zernike_order, pupil_size)
+            zernike_phase_indices = np.arange(basis.shape[0])[3:] # skip first 3
+
+        if psf_model_parameters.constant_pupil_magnitude:
+            zernike_magnitude_indices = np.array([0])
+        elif psf_model_parameters.radially_symmetric_magnitude: # i think this should only be for magnitude,
+            zernike_magnitude_indices = utils.get_spherical_indices(zernike_indices)
+        else:
+            zernike_magnitude_indices = np.arange(basis.shape[0])
+
+        return np.float32(basis), zernike_magnitude_indices, zernike_phase_indices
 
     @staticmethod
     def _compute_pupil_geometry(
@@ -396,7 +409,7 @@ class IPSFModel(ABC):
         image_size: int,
     ) -> tuple:
         pupil_freq_pixel_size = 2.0 * NA / wavelength / pupil_size
-        return im.prechirpz1(
+        return utils.prechirpz1(
             pupil_freq_pixel_size, pixelsize_x, pixelsize_y, pupil_size, image_size,
         )
 
@@ -410,13 +423,13 @@ class IPSFModel(ABC):
     ) -> np.complex64:
         pupil = tf.cast(pupil_mask * apodization, tf.complex64)
         if psf_type == 'scalar':
-            propagated = im.cztfunc1(pupil, czt_parameters)
+            propagated = utils.cztfunc1(pupil, czt_parameters)
             intensity = propagated * np.conj(propagated)
             return np.complex64(1.0 / np.sum(intensity))
         I_total = 0.0
         for h in dipole_field:
             pupil_function = pupil * h
-            propagated = im.cztfunc1(pupil_function, czt_parameters)
+            propagated = utils.cztfunc1(pupil_function, czt_parameters)
             I_total += propagated * tf.math.conj(propagated)
         return np.complex64(1.0 / np.sum(I_total))
 
@@ -514,7 +527,7 @@ class IPSFModel(ABC):
     @staticmethod
     def applyDrift(psfin: tf.Tensor, gxy: tf.Tensor, data: ImageData, pupil_field: PupilField) -> tf.Tensor:
         """Apply drift or shift correction to a PSF using skew or linear drift."""
-        otf2d = im.fft2d(tf.complex(psfin,0.0))
+        otf2d = utils.fft2d(tf.complex(psfin,0.0))
         if data.skew_const:
             # drift
             sk = np.array([data.skew_const],dtype=np.float32)+np.zeros(gxy.shape,dtype=np.float32)
@@ -526,7 +539,7 @@ class IPSFModel(ABC):
             # shift
             gxy = tf.complex(tf.reshape(gxy,gxy.shape+(1,1,1)),0.0)*pupil_field.z_positions
             shiftphase = IPSFModel.phaseRamp(gxy, pupil_field)
-        psf_shift = tf.math.real(im.ifft2d(otf2d*shiftphase))
+        psf_shift = tf.math.real(utils.ifft2d(otf2d*shiftphase))
 
         return psf_shift
 

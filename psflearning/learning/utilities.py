@@ -109,14 +109,22 @@ def radialpoly(n: int, m: int, rho: np.ndarray) -> np.ndarray:
 
     return r
 
-def gen_zernike_polynomials(n_max: int, xsz: int) -> np.ndarray:
+def get_spherical_indices(zernike_indices: list[tuple[int, int]]) -> list[int]:
+    spherical_indices = []
+    for i, (n, l) in enumerate(zernike_indices):
+        if n % 2 ==0 and l == 0:
+            spherical_indices.append(i)
+
+    return spherical_indices
+
+def gen_zernike_polynomials(n_max: int, xsz: int) -> tuple[np.ndarray, list]:
     """Generate Zernike polynomials up to radial order n_max on an xsz x xsz grid."""
     Nk = (n_max+1)*(n_max+2)//2
 
     zernike_selection = []
     for j in range(0,Nk):
         zernike_selection.append(noll2nl(j+1))
-    return gen_zernike_polynomials_from_selection(zernike_selection, xsz)
+    return gen_zernike_polynomials_from_selection(zernike_selection, xsz), zernike_selection
 
 
 def gen_zernike_polynomials_from_selection(nm_pairs: list[tuple[int, int] | list[int]], xsz: int) -> np.ndarray:

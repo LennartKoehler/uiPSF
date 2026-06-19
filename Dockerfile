@@ -18,4 +18,4 @@ RUN pip install /app
 COPY . /app
 RUN pip install --no-deps -e /app
 
-CMD ["python3", "test/demo/test_demo_bead_raw.py"]
+CMD ["python3", "test/demo/test_demo_bead_plotting.py"]

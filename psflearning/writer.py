@@ -226,10 +226,8 @@ def _build_result_dict(
         "psf_model_image_with_bead": learning_result.psf_model_image_with_bead,
         "psf_model_image": learning_result.psf_model_image,
         "pupil": learning_result.pupil,
-        "zernike_coefficients": np.array([
-            np.squeeze(learning_result.zernike_magnitude),
-            np.squeeze(learning_result.zernike_phase),
-        ]),
+        "zernike_coefficients_magnitude": np.squeeze(learning_result.zernike_magnitude),
+        "zernike_coefficients_phase": np.squeeze(learning_result.zernike_phase),
         "gaussian_blur_sigma": np.squeeze(learning_result.sigma) / np.pi,
         "drift_rate": learning_result.drift_xy,
         "model_image_offset": np.min(learning_result.psf_model_image),

@@ -10,7 +10,7 @@ from tensorflow import math as tfm
 
 from .IPSFModel import IPSFModel, PupilField
 
-from .. import utilities as im
+from .. import utilities as utils
 from psflearning.io.param import RunParameters
 
 @dataclass
@@ -46,7 +46,6 @@ class PSFContext:
     optimization_weights: OptimizationWeights
     initial_pupil: Optional[np.ndarray] = None
     psf_type: str = 'scalar'
-    max_magnitude_order: int = 100
 
 
 
@@ -115,7 +114,6 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         weight_mag: float,
         weight_phase: float,
         context: PSFContext,
-        noll_index: np.ndarray | None = None,
     ) -> tf.Tensor:
         """
         Compute pupil function from Zernike coefficients.
@@ -125,42 +123,19 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
             Zcoeff_phase: Zernike phase coefficients (shape: [N, ...] or [n_k, 1, 1]).
             weight_mag: Weight multiplier for magnitude.
             weight_phase: Weight multiplier for phase.
-            context: PSF context providing params, zernike_polynomial_basis, spherical_noll_indices.
-            noll_index: Optional Noll indices to select specific Zernike modes.
+            context: PSF context providing params, zernike_polynomial_basis, zernike_magnitude_indices, zernike_phase_indices.
 
         Returns:
             Complex pupil function.
         """
         pf = context.pupil_field
-        uses_custom_polys = bool(context.params.model.psf.zernike_polynomials)
 
-        if uses_custom_polys:
-            pupil_mag = tf.reduce_sum(
-                pf.zernike_polynomial_basis * Zcoeff_mag * weight_mag, axis=0
-            )
-            pupil_phase = tf.reduce_sum(
-                pf.zernike_polynomial_basis * Zcoeff_phase * weight_phase, axis=0
-            )
-        else:
-            c1 = pf.spherical_noll_indices
-            n_max = context.max_magnitude_order
-            Nk = np.min(((n_max + 1) * (n_max + 2) // 2, pf.zernike_polynomial_basis.shape[0]))
-            mask = c1 < Nk
-            c1 = c1[mask]
-
-            if noll_index is not None:
-                pupil_mag = tf.reduce_sum(
-                    pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
-                )
-            elif context.params.model.psf.radially_symmetric_magnitude:
-                pupil_mag = tf.reduce_sum(
-                    pf.zernike_polynomial_basis[c1] * tf.gather(Zcoeff_mag, indices=c1) * weight_mag, axis=0
-                )
-            else:
-                pupil_mag = tf.reduce_sum(
-                    pf.zernike_polynomial_basis[0:Nk] * Zcoeff_mag[0:Nk] * weight_mag, axis=0
-                )
-            pupil_phase = tf.reduce_sum(pf.zernike_polynomial_basis[3:] * Zcoeff_phase[3:] * weight_phase, axis=0)
+        pupil_mag = tf.reduce_sum(
+            pf.zernike_polynomial_basis[pf.zernike_magnitude_indices] * Zcoeff_mag * weight_mag, axis=0
+        )
+        pupil_phase = tf.reduce_sum(
+            pf.zernike_polynomial_basis[pf.zernike_phase_indices] * Zcoeff_phase * weight_phase, axis=0
+        )
 
         pupil_mag = tfm.maximum(pupil_mag, 0)
 
@@ -192,14 +167,14 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
                 PupilFunction = pupil * phase_z * h
                 if phase_xy is not None:
                     PupilFunction = PupilFunction * phase_xy
-                propagated_psf_amplitude = im.cztfunc1(PupilFunction, pf.czt_parameters)
+                propagated_psf_amplitude = utils.cztfunc1(PupilFunction, pf.czt_parameters)
                 I_res += propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * pf.normalization_factor
             return I_res
         else:
             PupilFunction = pupil * phase_z
             if phase_xy is not None:
                 PupilFunction = PupilFunction * phase_xy
-            propagated_psf_amplitude = im.cztfunc1(PupilFunction, pf.czt_parameters)
+            propagated_psf_amplitude = utils.cztfunc1(PupilFunction, pf.czt_parameters)
             return propagated_psf_amplitude * tfm.conj(propagated_psf_amplitude) * pf.normalization_factor
 
     def compute_gaussian_filter(self, sigma: tf.Tensor | np.ndarray, context: PSFContext) -> tf.Tensor:
@@ -241,9 +216,9 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         """
         filter2 = self.compute_gaussian_filter(sigma, context)
         if use_bead_kernel:
-            blurred = im.ifft3d(im.fft3d(I_res) * context.bead_kernel * filter2)
+            blurred = utils.ifft3d(utils.fft3d(I_res) * context.bead_kernel * filter2)
         else:
-            blurred = im.ifft3d(im.fft3d(I_res) * filter2)
+            blurred = utils.ifft3d(utils.fft3d(I_res) * filter2)
         return tf.expand_dims(tfm.real(blurred), axis=-1)
 
     def bin_image_3d(
