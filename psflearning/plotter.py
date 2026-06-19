@@ -88,14 +88,9 @@ class Plotter:
             fig = self.plot_localization(locres.positions, p.data.pixel_size)
         localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
 
-        zernike_coefficients = np.array([
-            np.squeeze(res.zernike_magnitude),
-            np.squeeze(res.zernike_phase),
-        ])
-
         try:
             fig_coeff, fig_pupil = self.plot_zernike(
-                zernike_coefficients, res.pupil, pupil_field.zernike_polynomial_basis,
+                res.zernike_magnitude, res.zernike_phase, res.pupil, pupil_field.zernike_polynomial_basis,
             )
             zernike_paths = save_figs(fig_coeff, output_dir, "zernike", fmt, dpi)
             pupil_paths = save_figs(fig_pupil, output_dir, "pupil", fmt, dpi)
@@ -185,7 +180,8 @@ class Plotter:
 
     @staticmethod
     def plot_zernike(
-        zernike_coeff: np.ndarray,
+        zernike_coeff_mag: np.ndarray,
+        zernike_coeff_phase: np.ndarray,
         pupil: np.ndarray,
         zernike_polynomial: np.ndarray,
         index: Optional[int] = None,
@@ -387,10 +383,11 @@ def _plot_pupil_single(
 
 
 def _plot_zernike_coefficients(
-    zernike_coeff: np.ndarray,
+    zernike_coeff_mag: np.ndarray,
+    zernike_coeff_phase: np.ndarray,
     index: Optional[int] = None,
 ) -> matplotlib.figure.Figure:
-    n_max = zernike_coeff.shape[-1] - 1
+    n_max = zernike_coeff_mag.shape[-1] - 1
     n_max_approx = int(np.sqrt(2 * n_max))
     Nk = (n_max_approx + 1) * (n_max_approx + 2) // 2
 
@@ -401,7 +398,7 @@ def _plot_zernike_coefficients(
     Nzk = int(np.sum(mask))
 
     if index is not None:
-        zcoeff = zernike_coeff[:, index]
+        zcoeff = zernike_coeff_mag[:, index]
     else:
         zcoeff = zernike_coeff
 

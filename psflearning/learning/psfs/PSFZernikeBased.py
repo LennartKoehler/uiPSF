@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
+from psflearning.io.param import RunParameters
 
 from typing import Any, Optional, Union
 
@@ -11,8 +12,8 @@ from scipy.ndimage import gaussian_filter
 from psflearning.learning.data_representation.ImageData import ImageData
 
 from .PSFZernikeBase import PSFZernikeBase, PSFContext
-from .IPSFModel import LearnableParameter, LearnablePSFParameters, ParameterScope, PupilField
-from .PSFZernikeBase import OptimizationWeights
+from .IPSFModel import LearnableParameter, LearnablePSFParameters, ParameterScope
+from .PSFZernikeBase import OptimizationWeights, ZernikeContext
 
 
 @dataclass
@@ -33,6 +34,7 @@ class ZernikePSFResult:
     zernike_phase: np.ndarray
     sigma: np.ndarray
     drift_xy: np.ndarray
+    zernikeContext: ZernikeContext
 
 
 
@@ -176,7 +178,7 @@ class PSFZernikeBased(PSFZernikeBase):
     def calc_initials(
         self,
         data: ImageData,
-        params,
+        params: RunParameters,
         initial_pupil: Optional[Union[np.ndarray, list]] = None,
     ) -> tuple[ZernikePSFVariables, PSFContext]:
         """
@@ -212,6 +214,10 @@ class PSFZernikeBased(PSFZernikeBase):
         Nz = bead_kernel.shape[0]
         pupil_field = self.compute_pupil_field(data, params, psf_type, Nz=Nz)
 
+        zernike_context = self._compute_zernike_basis(
+            params.model.psf
+        )
+
         init_backgrounds[init_backgrounds < 0.1] = 0.1
         bg_median = np.median(init_backgrounds)
         weight_intensity = np.lib.scimath.sqrt(np.median(init_intensities))
@@ -226,8 +232,8 @@ class PSFZernikeBased(PSFZernikeBase):
 
         sigma = np.ones((2,)) * params.model.psf.extra_blur_sigma * np.pi
 
-        init_zernike_coeff_magnitude = np.zeros((pupil_field.zernike_magnitude_indices.shape[0], 1, 1))
-        init_zernike_coeff_phase = np.zeros((pupil_field.zernike_phase_indices.shape[0], 1, 1))
+        init_zernike_coeff_magnitude = np.zeros((zernike_context.zernike_magnitude_indices.shape[0], 1, 1))
+        init_zernike_coeff_phase = np.zeros((zernike_context.zernike_phase_indices.shape[0], 1, 1))
 
         init_zernike_coeff_magnitude[0, 0, 0] = 1 / optimization_weights.zernike_magnitude
 
@@ -248,6 +254,7 @@ class PSFZernikeBased(PSFZernikeBase):
         context = PSFContext(
             params=params,
             pupil_field=pupil_field,
+            zernike_context=zernike_context,
             bead_kernel=bead_kernel,
             optimization_weights=optimization_weights,
             initial_pupil=initial_pupil,
@@ -432,4 +439,5 @@ class PSFZernikeBased(PSFZernikeBase):
             zernike_phase=zernike_coeff_phase,
             sigma=sigma,
             drift_xy=drift_xy * context.optimization_weights.drift,
+            zernikeContext=context.zernike_context
         )

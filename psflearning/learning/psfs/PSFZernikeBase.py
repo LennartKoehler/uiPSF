@@ -28,6 +28,11 @@ class OptimizationWeights:
     zernike_magnitude: float
     zernike_phase: float
 
+@dataclass
+class ZernikeContext:
+    zernike_polynomial_basis: np.ndarray
+    zernike_magnitude_indices: np.ndarray
+    zernike_phase_indices: np.ndarray
 
 @dataclass
 class PSFContext:
@@ -42,6 +47,7 @@ class PSFContext:
 
     params: RunParameters
     pupil_field: PupilField
+    zernike_context: ZernikeContext
     bead_kernel: tf.Tensor
     optimization_weights: OptimizationWeights
     initial_pupil: Optional[np.ndarray] = None
@@ -128,13 +134,12 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         Returns:
             Complex pupil function.
         """
-        pf = context.pupil_field
 
         pupil_mag = tf.reduce_sum(
-            pf.zernike_polynomial_basis[pf.zernike_magnitude_indices] * Zcoeff_mag * weight_mag, axis=0
+            context.zernike_context.zernike_polynomial_basis[context.zernike_context.zernike_magnitude_indices] * Zcoeff_mag * weight_mag, axis=0
         )
         pupil_phase = tf.reduce_sum(
-            pf.zernike_polynomial_basis[pf.zernike_phase_indices] * Zcoeff_phase * weight_phase, axis=0
+            context.zernike_context.zernike_polynomial_basis[context.zernike_context.zernike_phase_indices] * Zcoeff_phase * weight_phase, axis=0
         )
 
         pupil_mag = tfm.maximum(pupil_mag, 0)
@@ -307,3 +312,26 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         return psf[..., st : Nz - st, :, :]
 
 
+    @staticmethod
+    def _compute_zernike_basis(
+        psf_model_parameters: PSFModelParams
+    ) -> ZernikeContext:
+
+        zernike_indices = psf_model_parameters.zernike_polynomials
+
+        if psf_model_parameters.zernike_polynomials:
+            basis = utils.gen_zernike_polynomials_from_selection(psf_model_parameters.zernike_polynomials, psf_model_parameters.pupil_size)
+            zernike_phase_indices = np.arange(basis.shape[0])
+
+        else:
+            basis, zernike_indices = utils.gen_zernike_polynomials(psf_model_parameters.max_zernike_order, psf_model_parameters.pupil_size)
+            zernike_phase_indices = np.arange(basis.shape[0])[3:] # skip first 3
+
+        if psf_model_parameters.constant_pupil_magnitude:
+            zernike_magnitude_indices = np.array([0])
+        elif psf_model_parameters.radially_symmetric_magnitude: # i think this should only be for magnitude,
+            zernike_magnitude_indices = utils.get_spherical_indices(zernike_indices)
+        else:
+            zernike_magnitude_indices = np.arange(basis.shape[0])
+
+        return ZernikeContext(np.float32(basis), zernike_magnitude_indices, zernike_phase_indices)

@@ -106,7 +106,7 @@ class PupilField:
 
     Returned by :meth:`IPSFModel.compute_pupil_field`.  Holds all
     precomputed arrays needed for pupil-based PSF modeling — frequency
-    grids, Zernike basis, CZT parameters, etc.
+    grids, CZT parameters, etc.
     """
 
     pupil_mask: Any
@@ -118,10 +118,6 @@ class PupilField:
     frequency_y: Any
     frequency_z: Any
     frequency_z_medium: Any
-    zernike_polynomial_basis: Any
-
-    zernike_magnitude_indices: np.ndarray
-    zernike_phase_indices: np.ndarray
 
     dipole_field: Any
     z_positions: Any
@@ -207,10 +203,6 @@ class IPSFModel(ABC):
 
         frequency_squared_x, frequency_squared_y = IPSFModel._compute_image_frequency_grid(image_size)
 
-        zernike_basis, zernike_magnitude_indices, zernike_phase_indices = IPSFModel._compute_zernike_basis(
-            params.model.psf,
-            pupil_size,
-        )
 
         geometry = IPSFModel._compute_pupil_geometry(
             pupil_size, NA, wavelength, n_immersion, n_medium, n_coverslip,
@@ -255,9 +247,6 @@ class IPSFModel(ABC):
             frequency_y=frequency_y,
             frequency_z=frequency_z,
             frequency_z_medium=frequency_z_medium,
-            zernike_polynomial_basis=zernike_basis,
-            zernike_magnitude_indices=zernike_magnitude_indices,
-            zernike_phase_indices=zernike_phase_indices,
             dipole_field=dipole_field,
             z_positions=z_positions,
             frequency_x_view=frequency_x_view,
@@ -275,30 +264,6 @@ class IPSFModel(ABC):
         freq_y = grid_y / image_size
         return np.float32(freq_x * freq_x), np.float32(freq_y * freq_y)
 
-    @staticmethod
-    def _compute_zernike_basis(
-        psf_model_parameters: PSFModelParams,
-        pupil_size: int,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-
-        zernike_indices = psf_model_parameters.zernike_polynomials
-
-        if psf_model_parameters.zernike_polynomials:
-            basis = utils.gen_zernike_polynomials_from_selection(psf_model_parameters.zernike_polynomials, pupil_size)
-            zernike_phase_indices = np.arange(basis.shape[0])
-
-        else:
-            basis, zernike_indices = utils.gen_zernike_polynomials(psf_model_parameters.max_zernike_order, pupil_size)
-            zernike_phase_indices = np.arange(basis.shape[0])[3:] # skip first 3
-
-        if psf_model_parameters.constant_pupil_magnitude:
-            zernike_magnitude_indices = np.array([0])
-        elif psf_model_parameters.radially_symmetric_magnitude: # i think this should only be for magnitude,
-            zernike_magnitude_indices = utils.get_spherical_indices(zernike_indices)
-        else:
-            zernike_magnitude_indices = np.arange(basis.shape[0])
-
-        return np.float32(basis), zernike_magnitude_indices, zernike_phase_indices
 
     @staticmethod
     def _compute_pupil_geometry(
