@@ -102,13 +102,14 @@ class PSFZernikeBase(IPSFModel, metaclass=ABCMeta):
         frequency_z,
         frequency_z_medium):
 
-        phiz = -1j * 2 * np.pi * frequency_z * (pos[:, 0] + z_range)
         if int(pos.shape[1]) > 3:
             phixy = 1j * 2 * np.pi * frequency_y * pos[:, 2] + 1j * 2 * np.pi * frequency_x * pos[:, 3]
             phiz = 1j * 2 * np.pi * (frequency_z_medium * pos[:, 1] - frequency_z * (pos[:, 0] + z_range))
         else:
             phixy = 1j * 2 * np.pi * frequency_y * pos[:, 1] + 1j * 2 * np.pi * frequency_x * pos[:, 2]
+            phiz = -1j * 2 * np.pi * frequency_z * (pos[:, 0] + z_range)
 
+        phiz = tf.complex(tf.zeros_like(tfm.real(phiz)), tfm.imag(phiz)) # keep on unit circle
         phase_z = tf.exp(phiz)
         phase_xy = tf.exp(phixy)
         return phase_z, phase_xy
