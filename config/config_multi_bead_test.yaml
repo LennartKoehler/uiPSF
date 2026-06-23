@@ -1,8 +1,8 @@
 Params:
   io:
-    data_path: ""
+    data_path: 'example_data_for_uiPSF/bead_data_substack'
     keyword: ""
-    output_path: ""
+    output_path: 'test_output'
     subfolder: ""
     format: .tif
     variable_name: ""
@@ -10,30 +10,30 @@ Params:
 
   data:
     camera_gain: 0.2
-    camera_offset: 398.6
+    camera_offset: 100
     stage_movement_direction: normal
     swap_xy_dimensions: false
-    emission_wavelength: 0.68
-    numerical_aperture: 1.43
+    emission_wavelength: 0.5
+    numerical_aperture: 1.2
     refractive_indices:
-      immersion: 1.516
+      immersion: 1.33
       medium: 1.335
-      coverslip: 1.516
+      coverslip: 1.33
     pixel_size:
-      x: 0.127
-      y: 0.116
-      z: 0.05
+      x: 0.086
+      y: 0.086
+      z: 0.5
     lattice_light_sheet:
       skew_translation_per_slice: [0,0]
 
   selection:
     roi:
-      roi_size: [21,21]
+      roi_size: [50,50]
       gauss_sigma: [2,2]
       max_kernel: [3,3]
       peak_height: 0.2
-      max_bead_number: 40
-      bead_radius: 0.0
+      max_bead_number: 30
+      bead_radius: 0.1
     FOV:
       y_center: 0
       x_center: 0

@@ -1,8 +1,0 @@
-Params:
-  io:
-    data_path: ""
-    keyword: "Default."
-    output_path: ""
-  model:
-    psf:
-      zernike_polynomials: [[-1,1]]

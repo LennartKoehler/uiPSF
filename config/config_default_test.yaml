@@ -1,19 +1,19 @@
 Params:
   io:
-    data_path: ""
-    keyword: ""
-    output_path: ""
-    subfolder: ""
+    data_path: 'example_data_for_uiPSF/1ch_40nm_bead/'
+    keyword: Pos
+    output_path: 'test_output'
+    subfolder: Pos
     format: .tif
     variable_name: ""
     filelist: []
 
   data:
-    camera_gain: 0.2
-    camera_offset: 398.6
+    camera_gain: 0.22
+    camera_offset: 400
     stage_movement_direction: normal
     swap_xy_dimensions: false
-    emission_wavelength: 0.68
+    emission_wavelength: 0.6
     numerical_aperture: 1.43
     refractive_indices:
       immersion: 1.516
@@ -32,8 +32,8 @@ Params:
       gauss_sigma: [2,2]
       max_kernel: [3,3]
       peak_height: 0.2
-      max_bead_number: 40
-      bead_radius: 0.0
+      max_bead_number: 20
+      bead_radius: 0.025
     FOV:
       y_center: 0
       x_center: 0
@@ -73,7 +73,7 @@ Params:
 
   runtime:
     use_cuda: true
-    batch_size: 1600
+    batch_size: 30
     max_iterations: 200
     enable_relearning: true
     enable_localization: false
