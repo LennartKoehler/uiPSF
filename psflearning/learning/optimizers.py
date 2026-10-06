@@ -67,6 +67,41 @@ class OptimizerABC:
         """
         raise NotImplementedError("You need to implement a 'create_actual_optimizer' method in your optimizer class.")
 
+
+    def write_graph(self, objective, variables : LearnablePSFParameters, reporter: ProgressReporter, log_dir: str = "test_output/logs"):
+        """
+        Trains the given variables while dumping the TF graph of the objective
+        to TensorBoard log files in log_dir.
+        Returns the same variables object (mutated in-place by the optimizer).
+        """
+        variablesTensor = variables.toTensorList()  # List[tf.Variable]
+
+        writer = tf.summary.create_file_writer(log_dir)
+
+        @tf.function
+        def train_step():
+            with tf.GradientTape() as tape:
+                loss = objective(variables)
+            gradients = tape.gradient(loss, variablesTensor)
+            self.opt.apply_gradients(zip(gradients, variablesTensor))
+            return loss
+
+        @tf.function
+        def forward_only():
+            return objective(variables)
+
+        with writer.as_default():
+            tf.summary.graph(forward_only.get_concrete_function().graph)
+
+        for step in range(self.maxiter):
+            start = time.time()
+            loss = train_step()
+            reporter.update(1, loss=loss)
+            self.update_history(step+1, time.time()-start, loss.numpy())
+
+        writer.flush()
+        return variables
+
     def minimize(self, objective, variables : LearnablePSFParameters, reporter: ProgressReporter):
         """
         Adapts the given variables in a way that minimizes the given objective.
@@ -85,6 +120,7 @@ class OptimizerABC:
             self.update_history(step+1, time.time()-start, loss.numpy())
 
         return variables
+
 
     def objective_wrapper_for_optimizer(self, variables):
         """
@@ -477,9 +513,11 @@ class L_BFGS_B(OptimizerABC):
             # so that the gradient tape can track the watched tensors through
             # the objective function. fromTensorList would create new tf.Variables
             # that have no gradient connection to the watched batch_tensors.
+
             with tf.GradientTape() as tape:
                 tape.watch(batch_tensors)
                 loss1 = objective(batch_tensors, mu[0], ind[i:i+2])
+
             w1 = batch_tensors[0].shape[0] / Nfit
             loss = loss + loss1 * w1
             grad1 = tape.gradient(loss1, batch_tensors)
