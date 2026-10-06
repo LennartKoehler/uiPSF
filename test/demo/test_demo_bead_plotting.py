@@ -11,45 +11,32 @@ from psflearning import io
 from psflearning import Plotter
 
 import logging
-logging.basicConfig(filename='uiPSF.log', level=logging.DEBUG)
+logging.basicConfig(filename='test_output/uiPSF.log', level=logging.DEBUG, filemode='w')
+logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+logging.getLogger('matplotlib.colorbar').setLevel(logging.WARNING)
+logging.getLogger('matplotlib.pyplot').setLevel(logging.WARNING)
+logging.getLogger('h5py').setLevel(logging.WARNING)
 
-main_data_dir = 'example_data_for_uiPSF'
-output_dir = 'test_output'
 
-param = io.param.load_params(psftype='zernike', userfile='config_user',sysfile='M2')
+param = io.param.load_params(userfile='config_multi_bead_test',sysfile=None)
 
 reader = Reader()
 writer = H5Writer()
 
 
 
-# -- SETUP --
-param.io.data_path = main_data_dir+'/1ch_40nm_bead/'
-param.io.output_path = param.io.data_path+'psfmodel'
-param.io.keyword = 'Pos'
-param.io.subfolder = 'Pos'
-param.data.camera_gain = 0.22
-param.data.camera_offset = 400
-param.selection.FOV.z_step = 1
-param.data.pixel_size.z = 0.05
-param.selection.roi.max_bead_number = 20
-param.selection.roi.bead_radius = 0.025
-param.runtime.batch_size = 30
-param.data.emission_wavelength = 0.6
-param.runtime.enable_relearning = False
-
 
 images = reader.read_images(param)
 # -- RUN --
 from psflearning.progress import TqdmProgressReporter
 reporter = TqdmProgressReporter()
-psf_model, dataobj, learning_result, forward_images, context = PSFLearningLib.learn(param, images, reporter=reporter)
+psf_model, dataobj, learning_result, forward_images, context, locres = PSFLearningLib.run(param, images, reporter=reporter)
 # -- SAVE --
 
 resfile = writer.save_result(param, context.pupil_field, dataobj, learning_result, forward_images, reporter=reporter)
 
 # -- PLOT & SAVE --
-print('\nGenerating plots and saving to:', output_dir)
+print('\nGenerating plots and saving to:', param.io.output_path)
 plotter: Plotter = Plotter()
 
-saved = plotter.generate_report(learning_result, dataobj, forward_images, context.pupil_field, None, param, output_dir, index=1)
+saved = plotter.generate_report(learning_result, dataobj, forward_images, context.pupil_field, locres, param, param.io.output_path, max_index=forward_images.shape[0])

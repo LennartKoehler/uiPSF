@@ -61,7 +61,7 @@ class Plotter:
         locres: Optional[LocalizationResult],
         p,
         output_dir: str,
-        index: int = 0,
+        max_index: int = 1,
         fmt: str = "png",
         dpi: int = 150,
     ):
@@ -70,23 +70,26 @@ class Plotter:
         zernike_paths = None
         pupil_paths = None
 
+        for i in range(max_index):
 
-        fig = _psf_display(
-            rois.measured_roi_images[index],
-            pixel_size_z,
-        )
+            custom_path = output_dir + "/beads/"
+            os.makedirs(custom_path, exist_ok=True)
+            fig = _psf_display(
+                rois.measured_roi_images[i],
+                pixel_size_z,
+            )
+            bead = save_figs(fig, custom_path, f"bead_{i}", fmt, dpi)
 
-        bead = save_figs(fig, output_dir, "bead_1", fmt, dpi)
 
-        fig = _psf_display(
-            forward_images[index],
-            pixel_size_z,
-        )
-        bead_psf = save_figs(fig, output_dir, "bead_1_psf", fmt, dpi)
+            fig = _psf_display(
+                forward_images[i],
+                pixel_size_z,
+            )
+            bead_psf = save_figs(fig, custom_path, f"bead_{i}_psf", fmt, dpi)
 
         if locres:
             fig = self.plot_localization(locres.positions, p.data.pixel_size)
-        localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
+            localization_paths = save_figs(fig, output_dir, "localization", fmt, dpi)
 
         try:
             fig_coeff, fig_pupil = self.plot_zernike(

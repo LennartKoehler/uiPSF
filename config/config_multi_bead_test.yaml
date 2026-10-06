@@ -28,12 +28,12 @@ Params:
 
   selection:
     roi:
-      roi_size: [50,50]
-      gauss_sigma: [2,2]
-      max_kernel: [3,3]
+      roi_size: [50,50,50]
+      gauss_sigma: [2,2,2]
+      max_kernel: [3,3,3]
       peak_height: 0.2
       max_bead_number: 30
-      bead_radius: 0.1
+      bead_radius: 0.01
     FOV:
       y_center: 0
       x_center: 0
@@ -67,14 +67,14 @@ Params:
       intensity_normalization_weight: 0
       lateral_drift_weight: 10
     rej_threshold:
-      bias_z: 0.99
-      mse: 0.8
+      bias_z: 2.0
+      mse: 1.2
       photon: 1.5
 
   runtime:
     use_cuda: true
     batch_size: 1600
-    max_iterations: 200
+    max_iterations: 300
     enable_relearning: true
-    enable_localization: false
+    enable_localization: true
     plot_all_steps: false
