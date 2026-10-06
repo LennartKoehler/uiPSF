@@ -173,7 +173,6 @@ class PreprocessingPipeline:
         min_center_dist: float | None = None,
         FOV: Any = None,
         padPSF: bool = True,
-        plot: bool = True,
         pixelsize_y: float | None = None,
         skew_const: Any = None,
         max_bead_number: int | None = None,
@@ -200,11 +199,6 @@ class PreprocessingPipeline:
         offset = np.min((np.quantile(measured_roi_images, 1e-3), 0))
         measured_roi_images = measured_roi_images - offset
 
-        if plot:
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=[6, 6])
-            plt.plot(roi_centers[:, -1], roi_centers[:, -2], 'o', markersize=8, markerfacecolor='none')
-            plt.show()
 
         if padPSF:
             measured_roi_images = PreprocessingPipeline.pad_rois_z(measured_roi_images, bead_radius, pixelsize_z)
