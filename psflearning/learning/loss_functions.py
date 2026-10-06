@@ -88,17 +88,8 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
 
     background = variables.backgrounds.value
     intensity = variables.intensities.value
-    zernike_magnitude = variables.zernike_magnitude.value
-    sigma = variables.sigma.value
     drift_xy = variables.drift_xy.value
 
-    mydiff = model - data
-
-    mse_norm1 = tf.reduce_mean(tf.square(mydiff)) / tf.reduce_mean(data)
-    mse_norm2 = tf.reduce_mean(
-        tf.reduce_sum(tf.square(mydiff), axis=(-3, -2, -1)) /
-        tf.math.reduce_max(tf.square(data), axis=(-3, -2, -1))
-    ) / data.shape[-3] * 200
 
     LL = (model - data - data * tf.math.log(model) + data * tf.math.log(data))
     LL = tf.reduce_mean(LL[tf.math.is_finite(LL)])
@@ -107,8 +98,6 @@ def mse_real_zernike(model, data, variables=None, mu=None, w=None):
 
     bgmin = tf.reduce_sum(tf.math.square(tf.math.minimum(background, 0)))
     intensitymin = tf.reduce_sum(tf.math.square(tf.math.minimum(intensity, 0)))
-    g1 = tf.reduce_sum(tf.square(zernike_magnitude[0][1:]))
-    g2 = tf.reduce_sum(tf.square(zernike_magnitude[1]))
 
     loss = LL * w[0] + bgmin * w[5] * mu + intensitymin * w[6] * mu + gxymean * w[8]
 

@@ -360,6 +360,7 @@ class PSFZernikeBased(PSFZernikeBase):
             pupil = self.compute_pupil_from_zernike(Zcoeff_magnitude, Zcoeff_phase, weight_mag=1, weight_phase=1, context=context) # assumes the Zcoeff are already multiplied with weight
 
         phiz = -1j * 2 * np.pi * pf.frequency_z * pf.z_range
+        phiz = tf.complex(tf.zeros_like(tf.math.real(phiz)), tf.math.imag(phiz))
         phase_z = tf.exp(phiz)
 
         psf_model_image = self._render_psf(pupil, phase_z, sigma, context, use_bead_kernel=addbead)
