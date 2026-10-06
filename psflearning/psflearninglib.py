@@ -39,6 +39,7 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
+import logging
 from omegaconf import DictConfig
 
 from psflearning.learning.data_representation.ImageData import ImageData
@@ -85,7 +86,7 @@ class PSFLearningLib:
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.runtime.enable_relearning:
-            psf_model, learning_result, loc_result, forward_images, context = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, reporter=reporter)
+            psf_model, learning_result, loc_result, forward_images, context, dataobj = learn_psf_with_relearn_with_localization(parameters, dataobj, psf_info, reporter=reporter)
         else:
             psf_model, learning_result, _, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
             loc_result = localize(dataobj.pixelsize_z, learning_result.psf_model_image_with_bead, dataobj.measured_roi_images, parameters, reporter=reporter)
@@ -108,7 +109,7 @@ class PSFLearningLib:
         dataobj = PSFLearningLib._prep_data(parameters, images)
 
         if parameters.runtime.enable_relearning:
-            psf_model, learning_result, forward_images, context = learn_psf_with_relearn(parameters, dataobj, psf_info, reporter=reporter)
+            psf_model, learning_result, forward_images, context, dataobj = learn_psf_with_relearn(parameters, dataobj, psf_info, reporter=reporter)
         else:
             psf_model, learning_result, _, _, forward_images, context = learn_psf(parameters, dataobj, psf_info, reporter=reporter)
 
@@ -165,7 +166,7 @@ class PSFLearningLib:
             else skew_const
         )
 
-        return PreprocessingPipeline.process(
+        rois = PreprocessingPipeline.process(
             images=images,
             roi_size=roi_size,
             gaus_sigma=param.selection.roi.gauss_sigma,
@@ -178,10 +179,13 @@ class PSFLearningLib:
             pixelsize_y=param.data.pixel_size.y,
             pixelsize_z=param.data.pixel_size.z,
             bead_radius=param.selection.roi.bead_radius,
-            plot=param.runtime.plot_all_steps,
             padPSF=True,
             skew_const=skew_param,
             max_bead_number=param.selection.roi.max_bead_number,
         )
 
+        if param.selection.roi.max_bead_number and rois.measured_roi_images.shape[0] < param.selection.roi.max_bead_number:
+            logging.warning("Using lower number of beads than expected: %d beads", rois.measured_roi_images.shape[0])
+
+        return rois
 

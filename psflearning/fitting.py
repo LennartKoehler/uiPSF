@@ -16,8 +16,10 @@ import numpy as np
 
 from .reader import Reader
 from omegaconf import DictConfig
+import logging
 
 from .learning import PSFLearner, L_BFGS_B, LocalizationResult, get_intensity_difference_ratio, get_minimum_intensity, get_MSE_difference_ratio, filter_by_mask
+from .learning.data_representation.ImageData import ImageData
 from .psf_registry import PSFInfo
 from .learning.psfs.PSFZernikeBased import ZernikePSFResult, ZernikePSFVariables
 from .learning.psfs.PSFZernikeBase import PSFContext
@@ -104,7 +106,7 @@ def learn_psf_with_relearn(
     data,
     psf_info: PSFInfo,
     reporter: ProgressReporter,
-) -> Tuple[IPSFModel, ZernikePSFResult, np.ndarray, PSFContext]:
+) -> Tuple[IPSFModel, ZernikePSFResult, np.ndarray, PSFContext, ImageData]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -125,8 +127,8 @@ def learn_psf_with_relearn(
 
     Returns
     -------
-    tuple of (IPSFModel, ZernikePSFResult, np.ndarray, PSFContext)
-        ``(psf_model, fit_result, forward_images, context)``
+    tuple of (IPSFModel, ZernikePSFResult, np.ndarray, PSFContext, ImageData)
+        ``(psf_model, fit_result, forward_images, context, data)``
     """
     psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
@@ -136,14 +138,21 @@ def learn_psf_with_relearn(
         # remove outliers
         threshold = param.model.rej_threshold
 
+        n_beads = len(data.measured_roi_images)
+
         mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
-        mask = mseRatio > threshold.mse
+        mse_mask = mseRatio < threshold.mse
+        logging.info("Outliers removed due to mean squared error: %d", n_beads - sum(mse_mask))
 
         intensityRatio = get_intensity_difference_ratio(fit_result.intensities)
-        mask = (intensityRatio > threshold.photon) & mask
+        intensity_mask = (intensityRatio < threshold.photon)
+        logging.info("Outliers removed due to intensity difference: %d", n_beads - sum(intensity_mask))
 
         minI = get_minimum_intensity(fit_result.intensities)
-        mask = (minI > 0) & mask
+        min_intensity_mask = (minI > 0)
+        logging.info("Outliers removed due to minimum intensity: %d", n_beads - sum(min_intensity_mask))
+
+        mask = mse_mask & intensity_mask & min_intensity_mask
 
         result = filter_by_mask(
             data, variables, mask
@@ -155,7 +164,7 @@ def learn_psf_with_relearn(
             )
 
 
-    return psf, fit_result, forward_images, context
+    return psf, fit_result, forward_images, context, data
 
 
 def learn_psf_with_relearn_with_localization(
@@ -163,7 +172,7 @@ def learn_psf_with_relearn_with_localization(
     data,
     psf_info: PSFInfo,
     reporter: ProgressReporter,
-) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext]:
+) -> Tuple[IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext, ImageData]:
     """Learn PSF, localize, remove outliers and re-learn.
 
     Replicates the original learn_psf pipeline:
@@ -185,8 +194,8 @@ def learn_psf_with_relearn_with_localization(
 
     Returns
     -------
-    tuple of (IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext)
-        ``(psf_model, fit_result, locres, forward_images, context)``
+    tuple of (IPSFModel, ZernikePSFResult, LocalizationResult, np.ndarray, PSFContext, ImageData)
+        ``(psf_model, fit_result, locres, forward_images, context, data)``
     """
     psf, fit_result, learner, variables, forward_images, context = learn_psf(param, data, psf_info, reporter=reporter)
 
@@ -199,17 +208,24 @@ def learn_psf_with_relearn_with_localization(
         locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, reporter=reporter)
 
         # remove outliers
+        n_beads = len(data.measured_roi_images)
+
         mseRatio = get_MSE_difference_ratio(forward_images, data.measured_roi_images)
-        mask = mseRatio < threshold.mse
+        mse_mask = mseRatio < threshold.mse
+        logging.info("Outliers removed due to mean squared error: %d", n_beads - sum(mse_mask))
 
         intensityRatio = get_intensity_difference_ratio(fit_result.intensities)
-        mask = (intensityRatio < threshold.photon) & mask
+        intensity_mask = (intensityRatio < threshold.photon)
+        logging.info("Outliers removed due to intensity difference: %d", n_beads - sum(intensity_mask))
 
         minI = get_minimum_intensity(fit_result.intensities)
-        mask = (minI > 0) & mask
+        min_intensity_mask = (minI > 0)
+        logging.info("Outliers removed due to minimum intensity: %d", n_beads - sum(min_intensity_mask))
 
-        mask = (locres.mse_z_ratio < threshold.bias_z) & mask
+        localization_mask = (locres.mse_z_ratio < threshold.bias_z)
+        logging.info("Outliers removed due to bias localization: %d", n_beads - sum(localization_mask))
 
+        mask = mse_mask & intensity_mask & min_intensity_mask & localization_mask
 
         result = filter_by_mask(
             data, variables, mask
@@ -226,4 +242,4 @@ def learn_psf_with_relearn_with_localization(
     else:
         locres = localize(data.pixelsize_z, fit_result.psf_model_image_with_bead, data.measured_roi_images, param, reporter=reporter)
 
-    return psf, fit_result, locres, forward_images, context
+    return psf, fit_result, locres, forward_images, context, data

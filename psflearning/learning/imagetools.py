@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numbers
 import warnings
+import logging
 from typing import Sequence
 
 try:
@@ -46,17 +47,20 @@ def extractMultiPeaks(
         im2 = im
     coordinates = localMax(im2, threshold_rel=threshold_rel, kernel=kernel)
     coordinates = np.array(coordinates)
+    logging.info("Found %d local maxima in the input images", coordinates.shape[0])
     if coordinates.size>0:
-        if borderDist is not None:        
+        if borderDist is not None:
             borderDist = np.array(borderDist)
             inBorder = np.all(coordinates-borderDist >= 0,axis=1) & np.all(im.shape - coordinates - borderDist >= 0, axis=1)
+            logging.info("Removing %d potential beads because they are too close to the border (roi may be too large)", int((~inBorder).sum()))
             coordinates=coordinates[inBorder,:]
             #values=values[inBorder]
-        if FOV is not None:        
+        if FOV is not None:
             fov = np.array(FOV)
             #inFov = (coordinates[:,-1]>= fov[0]-fov[2]/2) & (coordinates[:,-1] <= fov[0]+fov[2]/2) & (coordinates[:,-2]>= fov[1]-fov[3]/2) & (coordinates[:,-2] <= fov[1]+fov[3]/2)
             coord_r = (coordinates[:,-1]-fov[1])**2+(coordinates[:,-2]-fov[0])**2
             inFov = coord_r<(fov[2]**2)
+            logging.info("Removing %d potential beads because they are not in field of view (check FOV settings)", int((~inFov).sum()))
             coordinates=coordinates[inFov,:]
 
     if alternateImg is not None:
@@ -180,7 +184,7 @@ def extract(
         #        print(pads)
         resF = np.pad(res, tuple(pads), 'constant', constant_values=PadValue)
         return resF
-    
+
 
 def expanddimvec(
     shape: Sequence[int] | int | None,
@@ -412,7 +416,7 @@ def dimToPositive(dimpos: int, ndims: int) -> int:
         ndims: total number of dimensions
 
     """
-    return dimpos+(dimpos<0)*ndims *ndims 
+    return dimpos+(dimpos<0)*ndims *ndims
 
 
 def ramp1D(N, ramp_dim=-1, freq='ftfreq'):

@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: test_demo_beadPSF_1ch",
+            "name": "Python: test_demo_bead_plotting",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/test/demo/test_demo_beadPSF_1ch.py",
+            "program": "${workspaceFolder}/test/demo/test_demo_bead_plotting.py",
             "console": "internalConsole",
             "cwd": "${workspaceFolder}",
             "env": {
